@@ -1,0 +1,205 @@
+---
+title: "Getting Started with BiocRefgetStore"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with BiocRefgetStore}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+BiocRefgetStore provides a BSgenome-compatible interface to reference genomes
+backed by GA4GH refget stores. Instead of managing FASTA files, you connect
+to a refget store (local or remote) and access sequences by digest.
+
+This tutorial uses the **2023 Human Pangenome Reference** -- a remote refget
+store containing 47 haplotype-resolved assemblies hosted on S3. Sequences are
+downloaded on-demand and cached locally, so you don't need to download the
+entire dataset upfront.
+
+## Installation
+
+BiocRefgetStore depends on `gtars`, a Rust-backed R package. Because `gtars`
+lives in a Rust monorepo with sibling crates, it must be installed from a local
+clone of the full repository (not directly from GitHub):
+
+```{r install, eval=FALSE}
+# 1. Clone the gtars monorepo (if you haven't already)
+# git clone https://github.com/databio/gtars.git
+
+# 2. Install gtars from the local clone (requires Rust toolchain)
+install.packages("path/to/gtars/gtars-r", repos = NULL, type = "source")
+
+# 3. Install BiocRefgetStore
+remotes::install_github("databio/BiocRefgetStore")
+# Or from local source:
+# install.packages("path/to/BiocRefgetStore", repos = NULL, type = "source")
+```
+
+`gtars` is not on CRAN and `remotes::install_github()` won't work for it
+because the R package depends on sibling Rust crates via relative paths.
+You need the full monorepo checkout so those paths resolve correctly.
+
+## Connect to a remote pangenome store
+
+Load a genome from the Human Pangenome Reference store. **Nothing is
+downloaded upfront:** opening fetches only the store/collection metadata, each
+`getSeq()` pulls just the bytes for the region you ask for, and that data is
+cached under `cache_path`. As long as you keep the same `cache_path`, the
+cache is reused across calls and across R sessions -- so repeated access is
+served locally, with no re-downloading.
+
+```{r remote-store, eval=FALSE}
+library(BiocRefgetStore)
+
+# 2023 Human Pangenome Reference (47 haplotype-resolved assemblies)
+pangenome_url <- "https://refgenie.s3.us-east-1.amazonaws.com/pangenome_refget_store"
+
+# One assembly from the pangenome (481 sequences)
+genome <- RefgetGenome.from_remote(
+  cache_path = "~/.cache/refget/pangenome",
+  remote_url = pangenome_url,
+  digest = "0qveCdMlbF_kYn6XWb7YBy-FtRZ6gSAL"
+)
+genome
+#> RefgetGenome with 481 sequences
+#>   collection_digest: 0qveCdMlbF_kYn6XWb7YBy-FtRZ6gSAL
+#>   seqnames: JAHEPG010000017.1, JAHEPG010000014.1, JAHEPG010000009.1, JAHEPG010000029.1, JAHEPG010000005.1 ... (476 more)
+```
+
+Use the names reported by `seqnames(genome)` for all access below; this
+vignette uses the first one, `JAHEPG010000017.1`, as the example.
+
+> **Known limitation (gtars 0.9.0).** Opening remote stores and reading their
+> metadata works today. On-demand sequence *data* retrieval against this
+> public store is currently blocked by a gtars 0.9.0 bug: it does not strip
+> the `SQ.` digest prefix when building the remote `.seq` object path, so
+> sequence fetches return HTTP 403 and yield an empty result. The data-access
+> chunks below are the intended workflow and become functional once that
+> prefix handling is fixed upstream in gtars. They are kept `eval=FALSE` here.
+
+## Basic sequence access
+
+Extract a full sequence or a region by coordinates:
+
+```{r getseq, eval=FALSE}
+# Full sequence (returns DNAString if Biostrings is installed)
+seq <- genome[["JAHEPG010000017.1"]]
+
+# Region by coordinates (1-based, inclusive)
+region <- getSeq(genome, "JAHEPG010000017.1", start = 1000, end = 2000)
+
+# Force character output
+region_chr <- getSeq(genome, "JAHEPG010000017.1", start = 1000, end = 2000,
+                     as.character = TRUE)
+```
+
+Negative-strand extraction applies the reverse complement:
+
+```{r strand, eval=FALSE}
+rc <- getSeq(genome, "JAHEPG010000017.1", start = 1000, end = 2000, strand = "-")
+```
+
+## Multiple regions at once
+
+Pass vectors of names, starts, and ends:
+
+```{r vectorized, eval=FALSE}
+seqs <- getSeq(
+  genome,
+  names = c("JAHEPG010000017.1", "JAHEPG010000014.1", "JAHEPG010000009.1"),
+  start = c(100, 200, 300),
+  end   = c(199, 299, 399)
+)
+```
+
+If you have a GRanges object, pass it directly:
+
+```{r granges, eval=FALSE}
+library(GenomicRanges)
+gr <- GRanges(c("JAHEPG010000017.1:100-199:+", "JAHEPG010000014.1:200-299:-"))
+seqs <- getSeq(genome, gr)
+```
+
+## Bulk extraction from a data.frame
+
+`extractRegions` accepts a data.frame with `chrom`, `start`, `end` columns:
+
+```{r extract-regions, eval=FALSE}
+regions <- data.frame(
+  chrom = c("JAHEPG010000017.1", "JAHEPG010000017.1", "JAHEPG010000014.1"),
+  start = c(100, 5000, 200),
+  end   = c(199, 5099, 299)
+)
+seqs <- extractRegions(genome, regions, as.character = TRUE)
+```
+
+## Export sequences to FASTA
+
+Write extracted regions or full sequences to a FASTA file:
+
+```{r export, eval=FALSE}
+# Regions to FASTA
+extractToFasta(genome, regions, "extracted_regions.fa")
+
+# Specific sequences
+exportChromosomes(genome, c("JAHEPG010000017.1", "JAHEPG010000014.1"), "subset.fa")
+
+# All sequences
+exportChromosomes(genome, output_path = "full_assembly.fa")
+```
+
+## Genome metadata
+
+Inspect sequences and their properties:
+
+```{r metadata, eval=FALSE}
+seqnames(genome)       # sequence names
+seqlengths(genome)     # named integer vector of lengths
+seqinfo(genome)        # full Seqinfo object
+length(genome)         # number of sequences
+collection_digest(genome)   # seqcol digest
+coordinate_system(genome)   # sorted_name_length_pairs digest
+sequence_digests(genome)    # per-sequence SHA512t24u digests
+```
+
+## Working with local FASTA files
+
+You can also create a genome directly from a local FASTA file. This builds
+an in-memory refget store, computes sequence digests, and creates a `Seqinfo`
+object automatically:
+
+```{r from-fasta, eval=FALSE}
+genome <- RefgetGenome.from_fasta("genome.fa")
+genome
+```
+
+## Persistent on-disk store
+
+For large genomes you access repeatedly, use an on-disk store so sequences
+are indexed once and reused across sessions:
+
+```{r on-disk, eval=FALSE}
+# First time: create the store from FASTA
+store <- gtars::refget_store_on_disk("~/.local/share/refget/hg38")
+result <- gtars::add_fasta(store, "hg38.fa")
+# Save the digest: result$digest
+
+# Later: reload without re-parsing
+genome <- RefgetGenome.from_directory(
+  "~/.local/share/refget/hg38",
+  digest = "saved_digest_string"
+)
+```
+
+## The same workflow in Python
+
+The remote-only workflow shown here mirrors the Python `refget` package. For a
+side-by-side reference -- open by URL + cache, list sequences, fetch by
+collection + name, batch-extract from a BED file, and export to FASTA -- see
+the Python demo at `data_loaders/demo_remote_store.py` in the `refget`
+repository.
+
+## Next steps
+
+See the [Reference](reference.html) vignette for complete documentation of
+every function and method in the package.
