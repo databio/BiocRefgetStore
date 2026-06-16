@@ -2,19 +2,22 @@
 #
 # IMPORTANT — gtars is a GitHub-only, Rust-extension dependency:
 #   * gtars is NOT on CRAN or Bioconductor. It is the hard `Imports` dependency
-#     of this package and must be installed from GitHub (databio/gtars).
+#     of this package (gtars >= 0.9.0, for the alias accessor
+#     `get_collection_metadata_by_alias`) and must be built from source.
 #   * gtars contains a Rust crate, so the runner needs a Rust toolchain (cargo)
-#     available BEFORE gtars is compiled/installed. We install Rust via
-#     dtolnay/rust-toolchain, then install gtars from GitHub via remotes, and
-#     only THEN resolve the remaining (Bioconductor) dependencies.
+#     available BEFORE gtars is compiled/installed.
 #
-# NOTE / TODO: gtars lives in a Rust monorepo whose R package (gtars-r) depends
-# on sibling crates via relative paths. `remotes::install_github("databio/gtars")`
-# targets the repo root and may NOT resolve those relative crate paths the way a
-# full monorepo checkout does. If the gtars install step fails in CI for that
-# reason, this check cannot run a full `R CMD check` yet. In that case, see the
-# `subdir`/checkout fallback notes below and gate accordingly — do not silently
-# skip the gtars install.
+# gtars lives in the databio/gtars Rust MONOREPO. Its R package, `gtars-r`,
+# depends on sibling crates (gtars-core, gtars-io, gtars-refget, ...) via
+# RELATIVE crate paths (../../../gtars-core etc., resolved from
+# gtars-r/src/rust/). `remotes::install_github("databio/gtars", subdir="gtars-r")`
+# does NOT preserve those sibling crates, so the Rust build cannot resolve the
+# relative paths and the install fails (and pak then reports
+# "Can't find package called gtars"). The robust fix used here is to do a FULL
+# checkout of the monorepo at a tag that provides 0.9.0 (v0.9.0) and
+# `R CMD INSTALL` the gtars-r subdir from within that full checkout, so the
+# relative crate paths resolve. gtars is installed into the same R library that
+# setup-r-dependencies uses, so the dependency solver sees it as already present.
 
 on:
   push:
@@ -30,8 +33,27 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
+      # Live-remote tests hit a public RefgetStore over the network. They are
+      # gated off by default; leaving this unset keeps them skipped in CI.
+      BIOCREFGETSTORE_RUN_REMOTE: "false"
     steps:
       - uses: actions/checkout@v4
+
+      # The gtars Rust crate is large and is compiled twice in this job (once
+      # in the explicit build step below, and again by pak when it resolves the
+      # package's own dependency graph in setup-r-dependencies). Combined with
+      # the Bioconductor dependency tree this overflows the default runner disk
+      # ("No space left on device"). Reclaim the pre-installed toolchains we do
+      # not use to give the build ~25 GB of extra headroom.
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /opt/hostedtoolcache/CodeQL \
+                      /usr/local/lib/android \
+                      /usr/share/dotnet \
+                      /opt/ghc \
+                      /usr/local/share/boost || true
+          df -h /
+        shell: bash
 
       # Rust toolchain is required to compile the gtars Rust extension.
       - name: Install Rust toolchain
@@ -44,16 +66,36 @@ jobs:
 
       - uses: r-lib/actions/setup-pandoc@v2
 
-      # Install gtars (Rust-extension, GitHub-only) from source BEFORE resolving
-      # the rest of the dependency graph, so setup-r-dependencies sees it as
-      # already available. If gtars-r needs the full monorepo (relative crate
-      # paths), replace this with a manual checkout of databio/gtars + an
-      # install.packages("<clone>/gtars-r", repos = NULL, type = "source") step.
-      - name: Install gtars from GitHub
+      # gtars-r's own R dependencies must be present before it can be built.
+      # (BiocGenerics + IRanges are Bioconductor; data.table is CRAN.) Install
+      # them directly with pak. We do NOT use setup-r-dependencies here because
+      # that action also resolves THIS package's DESCRIPTION, which lists gtars
+      # (not yet installable) and would fail.
+      - name: Install gtars R dependencies
         run: |
-          install.packages("remotes")
-          remotes::install_github("databio/gtars", subdir = "gtars-r", upgrade = "never")
+          install.packages("pak", repos = sprintf(
+            "https://r-lib.github.io/p/pak/stable/%s/%s/%s",
+            .Platform$pkgType, R.Version()$os, R.Version()$arch))
+          pak::pkg_install(c("data.table", "bioc::BiocGenerics", "bioc::IRanges"))
         shell: Rscript {0}
+
+      # Build + install gtars from a FULL monorepo checkout at v0.9.0 BEFORE
+      # resolving the rest of the dependency graph, so the later
+      # setup-r-dependencies sees gtars as already installed and does not try
+      # (and fail) to fetch it. A full clone (not a sparse/subdir export) is
+      # required so the gtars-r crate's relative sibling-crate paths
+      # (../../../gtars-core, ...) resolve.
+      - name: Build and install gtars (databio/gtars @ v0.9.0)
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.9.0 https://github.com/databio/gtars.git "$RUNNER_TEMP/gtars"
+          # Install into R_LIBS_USER (set by setup-r) so the dependency solver
+          # in the next step finds it. Fall back to the default user library.
+          LIB="${R_LIBS_USER:-$(Rscript -e 'cat(.libPaths()[1])')}"
+          mkdir -p "$LIB"
+          R CMD INSTALL --no-multiarch --with-keep.source -l "$LIB" "$RUNNER_TEMP/gtars/gtars-r"
+          Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"))'
+        shell: bash
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:

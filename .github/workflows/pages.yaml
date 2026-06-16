@@ -1,0 +1,137 @@
+# Build a standalone HTML docs site from the package vignettes and deploy it to
+# GitHub Pages. This is NOT pkgdown — it knits each vignette with rmarkdown and
+# writes a small landing page (see .github/render-site.R).
+#
+# The headline is vignettes/benchmark.Rmd, which runs the package's real
+# benchmark harness (run_benchmarks) at knit time. So the toolchain here must
+# match what executes that harness:
+#   * Rust (cargo) — to compile the gtars Rust extension.
+#   * gtars from GitHub (databio/gtars, subdir gtars-r) — the hard dependency.
+#   * Bioconductor Suggests used by the benchmark: Biostrings, BSgenome,
+#     rtracklayer, Rsamtools — plus bench and ggplot2 for the timings + plot.
+# This mirrors the install approach in R-CMD-check.yaml (owned by a separate
+# workflow); the two are kept independent on purpose.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+name: pages
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; let an in-progress run finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+    steps:
+      # Free disk on the runner: the full Bioconductor dependency graph
+      # (Biostrings/BSgenome/rtracklayer + deps) plus the gtars Rust build
+      # artifacts overrun the default image, which fails with
+      # "No space left on device". Drop large preinstalled toolchains we don't use.
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+        shell: bash
+
+      - uses: actions/checkout@v4
+
+      # Rust toolchain is required to compile the gtars Rust extension.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      # gtars-r's own R dependencies must be present before it can be built.
+      # We do NOT use setup-r-dependencies here because that action resolves
+      # THIS package's DESCRIPTION, which lists gtars (not yet installable) and
+      # would fail.
+      - name: Install gtars R dependencies
+        run: |
+          install.packages("pak", repos = sprintf(
+            "https://r-lib.github.io/p/pak/stable/%s/%s/%s",
+            .Platform$pkgType, R.Version()$os, R.Version()$arch))
+          pak::pkg_install(c("data.table", "bioc::BiocGenerics", "bioc::IRanges"))
+        shell: Rscript {0}
+
+      # Build + install gtars from a FULL monorepo checkout at v0.9.0 BEFORE
+      # resolving the rest of the dependency graph, so the later
+      # setup-r-dependencies sees gtars as already installed and does not try
+      # (and fail) to fetch it. A full clone (not a sparse/subdir export) is
+      # required so the gtars-r crate's relative sibling-crate paths
+      # (../../../gtars-core, ...) resolve.
+      - name: Build and install gtars (databio/gtars @ v0.9.0)
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch v0.9.0 https://github.com/databio/gtars.git "$RUNNER_TEMP/gtars"
+          LIB="${R_LIBS_USER:-$(Rscript -e 'cat(.libPaths()[1])')}"
+          mkdir -p "$LIB"
+          R CMD INSTALL --no-multiarch --with-keep.source -l "$LIB" "$RUNNER_TEMP/gtars/gtars-r"
+          Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"))'
+          # Reclaim the multi-GB Rust build artifacts; gtars is already installed.
+          rm -rf "$RUNNER_TEMP/gtars" "$HOME/.cargo/registry" || true
+          df -h /
+        shell: bash
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          # Bioconductor deps + the Suggests the benchmark vignette executes,
+          # plus rmarkdown/knitr for rendering. gtars is already installed above.
+          extra-packages: |
+            any::rmarkdown
+            any::knitr
+            any::bench
+            any::ggplot2
+            bioc::GenomeInfoDb
+            bioc::Biostrings
+            bioc::GenomicRanges
+            bioc::IRanges
+            bioc::Rsamtools
+            bioc::BSgenome
+            bioc::rtracklayer
+          needs: vignettes
+
+      # Install the package itself so system.file() resolves the bundled FASTA
+      # and run_benchmarks() is available to the benchmark vignette.
+      - name: Install BiocRefgetStore
+        run: R CMD INSTALL --no-multiarch --with-keep.source .
+
+      - name: Render vignettes to site/
+        run: Rscript .github/render-site.R
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
