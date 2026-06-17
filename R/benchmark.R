@@ -253,7 +253,28 @@ setup_bsgenome_from_fasta <- function(fasta_path) {
 # Each returns a function of a regions data.frame -> uppercased character
 # vector of sequences. Used both for timing and for the correctness check.
 
-.refget_extract_fns <- function(genome) {
+.refget_extract_fns <- function(genome, raw = FALSE) {
+  if (raw) {
+    # Raw extraction: gtars hands back a plain character vector and no
+    # Biostrings DNAStringSet is ever constructed. This isolates the actual
+    # store-read cost from the downstream Biostrings conversion that the other
+    # backends' DNAStringSet output type forces. `as.character = TRUE`
+    # short-circuits the DNAStringSet round-trip inside getSeq()/extractRegions().
+    return(list(
+      single = function(df) {
+        getSeq(genome, df$chrom[1], df$start[1], df$end[1], as.character = TRUE)
+      },
+      bulk = function(df) {
+        toupper(extractRegions(genome, df, as.character = TRUE))
+      },
+      full_chrom = function(chrom) {
+        getSeq(genome, chrom, as.character = TRUE)
+      }
+    ))
+  }
+  # Converted extraction: build a Biostrings DNAStringSet/DNAString (then back
+  # to character), matching the output the BSgenome/FaFile backends return. The
+  # delta between this and the raw variant above is exactly the conversion cost.
   list(
     single = function(df) {
       as.character(getSeq(genome, df$chrom[1], df$start[1], df$end[1],
@@ -488,7 +509,11 @@ run_benchmarks <- function(fasta_path = system.file("extdata/benchmark/bench_gen
     backends[["bsgenome"]] <- .bsgenome_extract_fns(bsg)
   }
 
-  backends[["refget"]] <- .refget_extract_fns(refget)
+  # Two refget rows: the converted one (DNAStringSet output, apples-to-apples
+  # with bsgenome/fafile) and the raw one (gtars character, no conversion), so
+  # the table shows how much of refget's time is the Biostrings conversion.
+  backends[["refget_converted"]] <- .refget_extract_fns(refget)
+  backends[["refget_raw"]]       <- .refget_extract_fns(refget, raw = TRUE)
 
   # Optional secondary baseline: indexed FASTA via FaFile.
   fafile <- setup_fafile_backend(fasta_path)

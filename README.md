@@ -8,14 +8,36 @@ BiocRefgetStore provides a bridge between the gtars RefgetStore format and Bioco
 
 ## Installation
 
-```r
-# Install gtars first (required)
-# See: https://github.com/databio/gtars
+BiocRefgetStore depends on **`gtars`** (>= 0.9.1), the Rust-backed sequence-store
+backend, which is **not on CRAN or Bioconductor**. Install it first.
 
-# Install BiocRefgetStore
-devtools::install_github("databio/BiocRefgetStore")
+**1. Install gtars (prerequisite).** Easiest is the prebuilt R binary from the
+release (Linux x86_64, R 4.4 — no Rust toolchain needed):
+
+```r
+install.packages(c("data.table", "BiocManager"))
+BiocManager::install(c("BiocGenerics", "IRanges"))   # gtars' own deps
+install.packages(
+  "https://github.com/databio/gtars/releases/download/v0.9.0/gtars_0.9.1_R_x86_64-pc-linux-gnu.tar.gz",
+  repos = NULL
+)
+```
+
+On other platforms/R versions, build from source — `gtars` lives in a Rust
+monorepo, so clone the full repo (not a subdir) and install with cargo/rustc
+present; `install_github()` won't work:
+
+```r
+# git clone https://github.com/databio/gtars.git
+install.packages("path/to/gtars/gtars-r", repos = NULL, type = "source")
+```
+
+**2. Install BiocRefgetStore:**
+
+```r
+remotes::install_github("databio/BiocRefgetStore")
 # Or from local source:
-# devtools::install_local("path/to/BiocRefgetStore")
+# install.packages("path/to/BiocRefgetStore", repos = NULL, type = "source")
 ```
 
 ## Quick Start
@@ -62,9 +84,10 @@ genome <- RefgetGenome.from_remote(
 
 You can work entirely against a remote RefgetStore: point at its URL plus a
 local cache directory and pull only the bytes you touch. Opening the store
-fetches just metadata; each `getSeq()` downloads only the sequence data it
-needs, and that data is cached under `cache_path` so later calls (and later
-sessions with the same `cache_path`) reuse it instead of re-downloading.
+fetches just metadata; each `getSeq()` then fetches only the bytes covering the
+requested region, over an HTTP byte-range request -- the whole sequence never
+lands on disk. Region reads persist nothing by default, so each call re-fetches
+its bytes (ideal for sparse, random access).
 
 ```r
 library(BiocRefgetStore)
@@ -84,7 +107,7 @@ seqlengths(genome)[1:5]
 # Pick a real sequence name from the collection.
 chrom <- seqnames(genome)[1]
 
-# 2. Single region -- pulls just this slice, then caches it.
+# 2. Single region -- pulls just this slice over an HTTP byte-range.
 getSeq(genome, chrom, start = 1000, end = 2000)
 
 # 3. Vectorized extraction across several regions in one call.
@@ -107,12 +130,11 @@ extractRegions(genome, regions)
 extractToFasta(genome, regions, "regions.fa")
 ```
 
-> **Note (gtars 0.9.0):** opening remote stores and reading their metadata
-> works today, but on-demand sequence-*data* retrieval against this public
-> store is currently blocked by a gtars 0.9.0 bug (it does not strip the
-> `SQ.` digest prefix when building the remote `.seq` object path, so data
-> fetches 403). The data steps above are the intended workflow and become
-> functional once that prefix handling is fixed upstream in gtars.
+> **Requires a recent `gtars`.** The remote sequence-data reads above need the
+> `gtars` release that adds the remote partial-read path -- the release
+> following `0.9.1`. With `0.9.1` itself, opening a remote store and reading its
+> *metadata* works, but region reads fail. Install the newer `gtars` (see
+> [Installation](#installation)) for the workflow above.
 
 For the same workflow in Python, see
 [`data_loaders/demo_remote_store.py`](https://github.com/refgenie/refget/blob/dev/data_loaders/demo_remote_store.py)

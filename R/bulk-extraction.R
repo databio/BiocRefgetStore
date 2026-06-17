@@ -1,6 +1,6 @@
 #' Extract regions from a RefgetGenome
 #'
-#' Efficiently extract multiple genomic regions using BED-based extraction.
+#' Efficiently extract multiple genomic regions in a single in-memory call.
 #'
 #' @param genome A RefgetGenome object
 #' @param regions A GRanges object or data.frame with columns: chrom, start, end
@@ -47,27 +47,21 @@ extractRegions <- function(genome, regions, as.character = FALSE) {
     stop("regions must have columns: chrom, start, end")
   }
 
-  # Write temp BED file (0-based coordinates for BED)
-  bed_file <- tempfile(fileext = ".bed")
-  on.exit(unlink(bed_file), add = TRUE)
-
-  bed_df <- data.frame(
-    chrom = regions$chrom,
-    start = as.integer(regions$start - 1),  # Convert to 0-based
-    end = as.integer(regions$end)
-  )
-  write.table(bed_df, bed_file, sep = "\t", row.names = FALSE,
-              col.names = FALSE, quote = FALSE)
-
-  # Use gtars BED extraction
-  retrieved <- gtars::get_seqs_bed_file_to_vec(
+  # In-memory bulk extraction: hand gtars the region vectors directly (no temp
+  # BED file, no per-region S4 boxing). gtars uses 0-based half-open (BED)
+  # coordinates, so convert from the 1-based closed coords used here (start - 1).
+  # Returns a data.frame with a flat `sequence` character vector. NOTE: unlike
+  # the old file path, gtars errors on a missing/out-of-range region rather than
+  # silently skipping it.
+  retrieved <- gtars::get_seqs_from_regions(
     genome@store,
     genome@collection_digest,
-    bed_file
+    as.character(regions$chrom),
+    as.integer(regions$start - 1),
+    as.integer(regions$end)
   )
 
-  # Extract sequence strings
-  seqs <- vapply(retrieved, function(r) r@sequence, character(1))
+  seqs <- retrieved$sequence
 
   # Name by region
   result_names <- sprintf("%s:%d-%d", regions$chrom, regions$start, regions$end)

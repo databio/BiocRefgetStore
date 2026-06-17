@@ -93,7 +93,9 @@ test_that("getSeq errors on out-of-range coordinates", {
 
   genome <- RefgetGenome.from_fasta(fasta_file)
 
-  expect_error(getSeq(genome, "chr1", 1, 100), "out of range")
+  # Coordinate extraction goes through gtars' indexed substring, which rejects
+  # the out-of-range request (message: "Invalid substring range: ... length=4").
+  expect_error(getSeq(genome, "chr1", 1, 100), "range")
 })
 
 test_that("getSeq with GRanges input works", {

@@ -4,3 +4,4 @@
 ^\.gitignore$
 ^README\.Rmd$
 ^LICENSE\.md$
+^data-raw$

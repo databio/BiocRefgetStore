@@ -40,6 +40,7 @@ if (!isGeneric("getSeq")) {
 #' }
 #'
 #' @rdname getSeq-methods
+#' @aliases getSeq
 #' @export
 setMethod("getSeq", "RefgetGenome",
   function(x, names, start = NA, end = NA, strand = "+", as.character = FALSE, ...) {
@@ -68,22 +69,21 @@ setMethod("getSeq", "RefgetGenome",
 #' Extract a single sequence or region
 #' @keywords internal
 .getSeq_single <- function(genome, name, start, end, strand, as.character) {
-  # Get full sequence via get_sequence_by_name
-  record <- gtars::get_sequence_by_name(genome@store, genome@collection_digest, name)
-  if (is.null(record)) {
-    stop(sprintf("Sequence '%s' not found in collection", name))
-  }
-
-  seq_string <- record@data
-
-  # Extract substring if coordinates provided
   if (!is.na(start) && !is.na(end)) {
-    # R uses 1-based indexing
-    if (start < 1 || end > nchar(seq_string)) {
-      stop(sprintf("Coordinates [%d, %d] out of range for sequence '%s' (length %d)",
-                   start, end, name, nchar(seq_string)))
+    # Coordinate extraction: indexed substring via gtars, NOT a whole-sequence
+    # fetch. gtars uses 0-based half-open (BED) coordinates, so start - 1.
+    retrieved <- gtars::get_seqs_from_regions(
+      genome@store, genome@collection_digest,
+      name, as.integer(start - 1L), as.integer(end)
+    )
+    seq_string <- retrieved$sequence[[1]]
+  } else {
+    # Whole-sequence request (no coordinates): fetch the full sequence.
+    record <- gtars::get_sequence_by_name(genome@store, genome@collection_digest, name)
+    if (is.null(record)) {
+      stop(sprintf("Sequence '%s' not found in collection", name))
     }
-    seq_string <- substr(seq_string, start, end)
+    seq_string <- record@data
   }
 
   # Handle negative strand
@@ -113,26 +113,17 @@ setMethod("getSeq", "RefgetGenome",
     stop("Length mismatch: names, start, end, and strand must have compatible lengths")
   }
 
-  # Use bulk BED extraction if all regions have coordinates
+  # Use in-memory bulk extraction if all regions have coordinates
   if (!any(is.na(start)) && !any(is.na(end))) {
-    # Write temp BED file (convert 1-based closed to 0-based half-open)
-    bed_file <- tempfile(fileext = ".bed")
-    on.exit(unlink(bed_file), add = TRUE)
-
-    bed_df <- data.frame(
-      chrom = names,
-      start = as.integer(start - 1L),
-      end = as.integer(end)
-    )
-    write.table(bed_df, bed_file, sep = "\t", row.names = FALSE,
-                col.names = FALSE, quote = FALSE)
-
-    # Single Rust FFI call for all regions
-    retrieved <- gtars::get_seqs_bed_file_to_vec(
-      genome@store, genome@collection_digest, bed_file
+    # Indexed extraction via a single FFI call: region vectors in, flat
+    # character vector out (no temp BED file, no per-region object boxing).
+    # gtars uses 0-based half-open (BED) coordinates, so start - 1.
+    retrieved <- gtars::get_seqs_from_regions(
+      genome@store, genome@collection_digest,
+      names, as.integer(start - 1L), as.integer(end)
     )
 
-    seqs <- vapply(retrieved, function(r) r@sequence, character(1))
+    seqs <- retrieved$sequence
 
     # Handle negative strand
     minus_idx <- which(strand == "-")

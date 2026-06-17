@@ -2,6 +2,7 @@
 % Please edit documentation in R/getSeq-methods.R
 \name{getSeq,RefgetGenome-method}
 \alias{getSeq,RefgetGenome-method}
+\alias{getSeq}
 \title{getSeq method for RefgetGenome}
 \usage{
 \S4method{getSeq}{RefgetGenome}(x, names, start = NA, end = NA, strand = "+", as.character = FALSE, ...)

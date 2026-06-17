@@ -10,31 +10,33 @@ vignette: >
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
 
-# The benchmark needs a timer (bench) and the comparison backend (a real
-# BSgenome forged from the bundled FASTA, which requires BSgenome,
-# rtracklayer, and Biostrings). When any are missing, the prose and code
-# still render but the timed chunks are skipped so the vignette knits
-# everywhere (CRAN/Bioc, the docs site, a bare R install).
-run_bench <- requireNamespace("bench", quietly = TRUE) &&
-  requireNamespace("BSgenome", quietly = TRUE) &&
-  requireNamespace("rtracklayer", quietly = TRUE) &&
-  requireNamespace("Biostrings", quietly = TRUE)
-
-have_ggplot <- requireNamespace("ggplot2", quietly = TRUE)
+# This vignette is a pure READER: it loads pre-computed results committed to the
+# package (benchmark_results.rds + benchmark_plot.png) and renders them, so it
+# knits anywhere with no heavy dependencies and runs no benchmark -- the docs
+# site does not benchmark in CI.
+#
+# The committed numbers are the full human genome (GRCh38). To regenerate them
+# (or run a different assembly), use the maintainer script data-raw/benchmark.R;
+# see "Regenerating" at the bottom of this vignette.
+res_file  <- "benchmark_results.rds"
+plot_file <- "benchmark_plot.png"
 ```
 
-BiocRefgetStore exposes a BSgenome-compatible interface to sequences backed by
-a [refget](https://samtools.github.io/hts-specs/refget.html) store (via the
-Rust-backed `gtars` crate). This vignette is a how-to for deciding **which
-backend to reach for** when you extract sequence: the RefgetStore backend in
-this package (`RefgetGenome`) or the classic Bioconductor stack
-(`BSgenome::getSeq()` on a real `BSgenome` object).
+BiocRefgetStore exposes a BSgenome-compatible interface to sequences backed by a
+[RefgetStore](https://refgenie.org/refget/refgetstore-explained/) (via the
+Rust-backed `gtars` crate). This vignette compares sequence extraction with the
+RefgetStore backend in this package (`RefgetGenome`) against the classic
+Bioconductor stack (`BSgenome::getSeq()` on a real `BSgenome` object).
 
-It is not a table of pre-baked numbers. Every figure below is produced *at knit
-time* by the package's own benchmark harness (`run_benchmarks()`, defined in
-`R/benchmark.R`) running on a small synthetic genome bundled in the package. So
-the absolute times depend on the machine that built this page, but the *shape*
-of the comparison is stable and reproducible.
+The numbers below are **reference measurements** committed to the package, taken
+on one maintainer machine on the **full human genome (GRCh38/hg38)** -- the 25
+primary chromosomes of `BSgenome.Hsapiens.UCSC.hg38`, with the RefgetStore built
+from that same assembly so the comparison is exact. Treat the absolute times as
+illustrative -- they depend on the hardware that produced them -- and read the
+table for the *shape* of the comparison: which backend wins which kind of
+access, and by roughly how much. The measurements are reproducible from the
+package's own harness (`run_benchmarks()`, defined in `R/benchmark.R`); see the
+comment at the top of this file to regenerate them.
 
 ## The two backends
 
@@ -48,50 +50,46 @@ foreign-function call, so per-region R overhead does not accumulate. See
 a genome. `BSgenome::getSeq()` reads from an on-disk `2bit` blob memory-mapped
 into the session. Whole-chromosome and in-memory access are its sweet spot.
 
-To make the comparison apples-to-apples, the harness forges a **real**
-in-memory `BSgenome` object from *the same FASTA* the RefgetStore reads (no
-data-package install, no network). Both backends therefore see identical
-seqnames and coordinates, and the harness asserts that the extracted sequences
-match (the `check` column below). An indexed-FASTA `Rsamtools::FaFile` is
-included as a secondary baseline when Rsamtools is available.
+To make the comparison apples-to-apples, the committed run builds the RefgetStore
+from a FASTA exported from `BSgenome.Hsapiens.UCSC.hg38` itself, and benchmarks
+against that same installed BSgenome data package. Both backends therefore see
+identical seqnames and coordinates, and the harness asserts that the extracted
+sequences match (the `Match` column below). An indexed-FASTA `Rsamtools::FaFile`
+is included as a secondary baseline. (When no BSgenome package is supplied, the
+harness instead forges a real in-memory `BSgenome` from the FASTA, which is how
+it runs on the small bundled genome with no data-package install.)
 
-## Running the benchmark
+## The harness
 
-The whole comparison is one call. `run_benchmarks()` builds the contestants
-from the bundled FASTA, warms each one (so index loads and mmap faults are
-excluded from timing), times single-region, bulk multi-region, and
-full-chromosome extraction, and returns a tidy data frame.
+The whole comparison is one call. `run_benchmarks()` builds the contestants from
+a FASTA, warms each one (so index loads and mmap faults are excluded from
+timing), times single-region, bulk multi-region, and full-chromosome extraction,
+and returns a tidy data frame with one row per (operation, backend): `operation`
+(`single` / `bulk` / `full_chrom`), `backend`, `n_regions`, `total_bp`,
+`median_time` (seconds), `mem_alloc`, `iterations`, and `check` (did this
+backend's output match the reference?).
 
-```{r run, eval = run_bench}
-library(BiocRefgetStore)
+The refget backend appears as **two rows**, to separate extraction from
+formatting:
 
-fa <- system.file("extdata/benchmark/bench_genome.fa",
-                  package = "BiocRefgetStore")
+- **`refget_converted`** returns a Biostrings `DNAStringSet`/`DNAString`, the
+  same object type `bsgenome` and `fafile` produce. This is the
+  apples-to-apples comparison.
+- **`refget_raw`** returns the plain character vector that `gtars` hands back,
+  with no `DNAStringSet` ever constructed (`getSeq(..., as.character = TRUE)`).
 
-# Smaller bulk set + iteration count keeps knit-time modest; the defaults
-# (n_bulk = 1000) are what you'd use for a real measurement.
-results <- run_benchmarks(fa, n_bulk = 200, min_iterations = 5)
-str(results)
-```
-
-```{r run-fallback, eval = !run_bench, echo = FALSE, results = "asis"}
-cat("> **Benchmark not run.** `bench`, `BSgenome`, `rtracklayer`, or",
-    "`Biostrings` is not installed, so the timed chunks are skipped.",
-    "Install those Suggests to reproduce the tables and plot below.\n")
-```
-
-The returned data frame has one row per (operation, backend): `operation`
-(`single` / `bulk` / `full_chrom`), `backend` (`bsgenome` / `refget` /
-`fafile`), `n_regions`, `total_bp`, `median_time` (seconds), `mem_alloc`,
-`iterations`, and `check` (did this backend's output match the reference?).
+The two differ *only* by the Biostrings conversion, so the gap between them is
+exactly what that conversion costs. The interesting result: a large share of
+refget's reported time is that conversion (the majority of it for
+whole-chromosome extraction) -- and **even so, refget wins every operation**.
 
 ## Timing results
 
-We format the live `results` into a readable table: median time in
-milliseconds, throughput in megabases per second, and the cross-backend
-correctness flag.
+Median time in milliseconds, throughput in megabases per second, and the
+cross-backend correctness flag (`bulk` here is `r I(format(2000L))` regions).
 
-```{r table, eval = run_bench}
+```{r table}
+results <- readRDS(res_file)
 tab <- results
 tab$median_ms <- round(tab$median_time * 1e3, 3)
 tab$mb_per_s <- round((tab$total_bp / 1e6) / tab$median_time, 1)
@@ -110,76 +108,65 @@ knitr::kable(
 
 ## Comparison plot
 
-```{r plot, eval = run_bench && have_ggplot, fig.width = 7, fig.height = 4}
-library(ggplot2)
-
-ggplot(results, aes(x = backend, y = median_time * 1e3, fill = backend)) +
-  geom_col() +
-  facet_wrap(~ operation, scales = "free_y") +
-  labs(x = NULL, y = "Median time (ms)",
-       title = "Extraction time by backend, faceted by operation") +
-  theme_minimal() +
-  theme(legend.position = "none",
-        axis.text.x = element_text(angle = 30, hjust = 1))
-```
-
-```{r plot-fallback, eval = run_bench && !have_ggplot, echo = FALSE, results = "asis"}
-cat("> *ggplot2 is not installed; skipping the plot.* The table above carries",
-    "the same information.\n")
+```{r plot, echo = FALSE, out.width = "100%"}
+knitr::include_graphics(plot_file)
 ```
 
 ## How to read this
 
-The interesting comparison is not a single winner but *where each backend
-wins*:
+On this genome, the RefgetStore backend is the fastest in every operation --
+single-region, bulk multi-region, *and* whole-chromosome -- ahead of both
+`BSgenome::getSeq()` and the indexed-FASTA `FaFile` baseline, with all backends
+returning identical sequence (the `Match` column). The size of the margin, and
+where it comes from, varies by operation:
 
-- **Bulk multi-region extraction** (`bulk`) is the headline case for
-  RefgetStore. `extractRegions()` passes the whole region set across the FFI
-  boundary once, so it avoids the per-region R-level overhead that the
-  `getSeq(bsgenome, gr)` path pays as the region count grows. This is the
-  workload to watch in the table above.
-- **Full-chromosome extraction** (`full_chrom`) plays to BSgenome's strength:
-  once the `2bit` is mapped, returning a whole contiguous sequence is close to
-  a memory read.
+- **Bulk multi-region extraction** (`bulk`) is the standout. `extractRegions()`
+  passes the whole region set across the FFI boundary in a single in-memory call
+  (no temp file, no per-region R object boxing), so the per-region R-level
+  overhead that grows with the region count never accumulates. This is the
+  workload to watch in the table above. Compare `refget_raw` against
+  `refget_converted` here: the raw character path is markedly faster, so a large
+  share of the converted row's time (≈27% on this run) is the Biostrings
+  `DNAStringSet` construction, not the store read -- and even with that
+  conversion, `refget_converted` still wins. If you only need a character
+  vector, the raw path is dramatically faster.
+- **Full-chromosome extraction** (`full_chrom`) returns one whole contiguous
+  sequence. The raw-vs-converted gap is even larger here -- roughly 58% of the
+  converted time is the `DNAStringSet` construction rather than decoding the
+  store -- yet `refget_converted` is still ahead of BSgenome and the FaFile
+  baseline.
 - **Single-region extraction** (`single`) is dominated by fixed per-call
-  overhead in both backends, so the numbers are small and noisy; don't
-  over-read them.
+  overhead in every backend, so the times are tiny and the absolute differences
+  are small; don't over-read them.
 
 There is also a one-time **setup cost** that the harness deliberately excludes
 from timing: constructing the RefgetGenome store, indexing the FASTA, or
 forging/loading the BSgenome. If you only ever read one region, that setup cost
-dominates everything in the table.
-
-### Which backend should I use?
-
-- **Pick RefgetGenome** for many-region or streaming workloads (BED-driven bulk
-  extraction), remote/on-demand access where you don't want the whole genome
-  on disk, and digest-addressed reproducibility.
-- **Pick BSgenome** when you already have the data package installed and your
-  work is mostly whole-chromosome, in-memory access.
+dominates everything in the table. And as noted above, treat the absolute times
+as illustrative -- they are hardware-dependent, so read the table for shape and
+magnitude rather than exact milliseconds.
 
 See the [Reference](reference.html) vignette for the complete API.
 
-## Optional: benchmarking against a real genome
+## Regenerating
 
-The same harness runs against a real assembly by naming an installed BSgenome
-data package and pointing `fasta_path` at that genome's FASTA (so coordinates
-match). This is **not run** when the vignette knits -- it needs a multi-hundred-
-megabyte data package and is gated behind an environment variable so a
-developer can opt in without editing this file.
+The committed results come from the maintainer script `data-raw/benchmark.R`,
+which exports the GRCh38 primary chromosomes from `BSgenome.Hsapiens.UCSC.hg38`
+to a FASTA, builds a RefgetStore from it, runs `run_benchmarks()`, and writes the
+committed `vignettes/benchmark_results.rds` + `vignettes/benchmark_plot.png`. It
+needs the benchmark Suggests (`bench`, `BSgenome`, `rtracklayer`, `Biostrings`,
+`ggplot2`) plus the hg38 data package installed, and a few GB of scratch disk:
 
-```{r real-genome, eval = nzchar(Sys.getenv("REFGET_BENCH_REAL")) && requireNamespace("BSgenome.Scerevisiae.UCSC.sacCer3", quietly = TRUE)}
-# Opt in with: Sys.setenv(REFGET_BENCH_REAL = "1")
-# and an installed BSgenome data package + matching FASTA.
-res_real <- run_benchmarks(
-  fasta_path = "sacCer3.fa",
+    Rscript data-raw/benchmark.R
+
+To benchmark a different assembly, name another installed BSgenome data package
+and a matching FASTA -- or call the harness directly:
+
+```{r real-genome, eval = FALSE}
+res <- run_benchmarks(
+  fasta_path   = "sacCer3.fa",                        # FASTA of that assembly
   bsgenome_pkg = "BSgenome.Scerevisiae.UCSC.sacCer3",
-  n_bulk = 1000
+  n_bulk       = 2000
 )
-knitr::kable(res_real)
+knitr::kable(res)
 ```
-
-For a full human assembly the pattern is identical: install
-`BSgenome.Hsapiens.UCSC.hg38`, supply its FASTA, and on the RefgetStore side
-build from an on-disk or remote store via `RefgetGenome.from_directory()` or
-`RefgetGenome.from_remote()` (see [Getting Started](getting-started.html)).

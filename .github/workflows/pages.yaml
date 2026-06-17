@@ -3,14 +3,14 @@
 # writes a small landing page (see .github/render-site.R).
 #
 # The headline is vignettes/benchmark.Rmd, which runs the package's real
-# benchmark harness (run_benchmarks) at knit time. So the toolchain here must
-# match what executes that harness:
-#   * Rust (cargo) — to compile the gtars Rust extension.
-#   * gtars from GitHub (databio/gtars, subdir gtars-r) — the hard dependency.
-#   * Bioconductor Suggests used by the benchmark: Biostrings, BSgenome,
-#     rtracklayer, Rsamtools — plus bench and ggplot2 for the timings + plot.
-# This mirrors the install approach in R-CMD-check.yaml (owned by a separate
-# workflow); the two are kept independent on purpose.
+# benchmark harness (run_benchmarks) at knit time, so the deployed timings +
+# plot reflect an actual CI execution. That harness needs gtars + the
+# Bioconductor Suggests (Biostrings/BSgenome/rtracklayer/Rsamtools) + bench +
+# ggplot2 installed before the render.
+#
+# gtars is installed from the PREBUILT R binary on the gtars v0.9.0 release
+# (see R-CMD-check.yaml for the rationale); this avoids compiling the Rust crate
+# in CI. The binary was built under R 4.4, so this job pins r-version 4.4.
 
 on:
   push:
@@ -36,77 +36,70 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
     steps:
-      # Free disk on the runner: the full Bioconductor dependency graph
-      # (Biostrings/BSgenome/rtracklayer + deps) plus the gtars Rust build
-      # artifacts overrun the default image, which fails with
-      # "No space left on device". Drop large preinstalled toolchains we don't use.
+      # The Bioconductor dependency tree (BSgenome/Rsamtools + the big
+      # RNAseqData.* BAM data packages pulled in via Suggests) overruns the
+      # default runner disk ("cannot create R_TempDir" / write errors). Reclaim
+      # preinstalled toolchains we don't use for ~25 GB of headroom.
       - name: Free up disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
-            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
-          df -h /
         shell: bash
+        run: |
+          sudo rm -rf /opt/hostedtoolcache/CodeQL \
+                      /usr/local/lib/android \
+                      /usr/share/dotnet \
+                      /opt/ghc \
+                      /usr/local/share/boost || true
+          df -h /
 
       - uses: actions/checkout@v4
 
-      # Rust toolchain is required to compile the gtars Rust extension.
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
       - uses: r-lib/actions/setup-r@v2
         with:
-          r-version: release
+          # MUST match the R version the gtars binary was built under (4.4),
+          # or its shared object will not load.
+          r-version: '4.4'
           use-public-rspm: true
 
       - uses: r-lib/actions/setup-pandoc@v2
 
-      # gtars-r's own R dependencies must be present before it can be built.
-      # We do NOT use setup-r-dependencies here because that action resolves
-      # THIS package's DESCRIPTION, which lists gtars (not yet installable) and
-      # would fail.
-      - name: Install gtars R dependencies
-        run: |
-          install.packages("pak", repos = sprintf(
-            "https://r-lib.github.io/p/pak/stable/%s/%s/%s",
-            .Platform$pkgType, R.Version()$os, R.Version()$arch))
-          pak::pkg_install(c("data.table", "bioc::BiocGenerics", "bioc::IRanges"))
-        shell: Rscript {0}
-
-      # Build + install gtars from a FULL monorepo checkout at v0.9.0 BEFORE
-      # resolving the rest of the dependency graph, so the later
-      # setup-r-dependencies sees gtars as already installed and does not try
-      # (and fail) to fetch it. A full clone (not a sparse/subdir export) is
-      # required so the gtars-r crate's relative sibling-crate paths
-      # (../../../gtars-core, ...) resolve.
-      - name: Build and install gtars (databio/gtars @ v0.9.0)
+      # Install the gtars prebuilt binary from the v0.9.0 release. Its R deps
+      # (data.table CRAN; BiocGenerics/IRanges Bioconductor) are not bundled, so
+      # install them first via pak (P3M-backed) before loading gtars. We do NOT
+      # use setup-r-dependencies here because it also resolves THIS package's
+      # DESCRIPTION, which lists gtars (not on any repo) and would fail.
+      - name: Install gtars 0.9.1 (prebuilt binary, attached to the gtars v0.9.0 release)
+        shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch v0.9.0 https://github.com/databio/gtars.git "$RUNNER_TEMP/gtars"
-          LIB="${R_LIBS_USER:-$(Rscript -e 'cat(.libPaths()[1])')}"
-          mkdir -p "$LIB"
-          R CMD INSTALL --no-multiarch --with-keep.source -l "$LIB" "$RUNNER_TEMP/gtars/gtars-r"
-          Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"))'
-          # Reclaim the multi-GB Rust build artifacts; gtars is already installed.
-          rm -rf "$RUNNER_TEMP/gtars" "$HOME/.cargo/registry" || true
-          df -h /
-        shell: bash
+          # gtars' own R deps (data.table CRAN; BiocGenerics/IRanges Bioconductor)
+          # are not bundled in the binary; install them first (P3M-backed via pak).
+          Rscript -e 'install.packages("pak", repos = sprintf("https://r-lib.github.io/p/pak/stable/%s/%s/%s", .Platform$pkgType, R.Version()$os, R.Version()$arch)); pak::pkg_install(c("data.table", "bioc::BiocGenerics", "bioc::IRanges"))'
+          # Download + install the prebuilt binary package. type="binary" is
+          # macOS/Windows-only; on Linux install the built tarball directly with
+          # R CMD INSTALL (it does not recompile a binary package). NOTE: the 0.9.1
+          # R binary is attached to the EXISTING v0.9.0 release tag (no separate
+          # v0.9.1 tag was cut), so the path is .../download/v0.9.0/gtars_0.9.1_...
+          curl -fsSL -o "$RUNNER_TEMP/gtars.tar.gz" \
+            https://github.com/databio/gtars/releases/download/v0.9.0/gtars_0.9.1_R_x86_64-pc-linux-gnu.tar.gz
+          R CMD INSTALL "$RUNNER_TEMP/gtars.tar.gz"
+          Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"), "get_seqs_from_regions" %in% getNamespaceExports("gtars"))'
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          # Bioconductor deps + the Suggests the benchmark vignette executes,
-          # plus rmarkdown/knitr for rendering. gtars is already installed above.
+          # The benchmark vignette is PRE-COMPUTED (committed results table + plot,
+          # see vignettes/benchmark.Rmd), so it is NOT executed at render time and
+          # the heavyweight comparison stack (BSgenome/Rsamtools/rtracklayer/bench/
+          # ggplot2 + their multi-GB data Suggests) is NOT needed here. We only
+          # need the rendering toolchain plus the package's own light deps.
+          dependencies: '"hard"'
+          # Bust the cached dependency library: earlier runs cached gtars 0.9.0,
+          # and restoring it clobbered the 0.9.1 binary installed in the step
+          # above (-> "unsuitable version: gtars"). Bump when gtars bumps.
+          cache-version: 3
           extra-packages: |
             any::rmarkdown
             any::knitr
-            any::bench
-            any::ggplot2
             bioc::GenomeInfoDb
             bioc::Biostrings
-            bioc::GenomicRanges
-            bioc::IRanges
-            bioc::Rsamtools
-            bioc::BSgenome
-            bioc::rtracklayer
           needs: vignettes
 
       # Install the package itself so system.file() resolves the bundled FASTA

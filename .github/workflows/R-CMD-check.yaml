@@ -1,23 +1,17 @@
 # R CMD check for BiocRefgetStore.
 #
-# IMPORTANT — gtars is a GitHub-only, Rust-extension dependency:
-#   * gtars is NOT on CRAN or Bioconductor. It is the hard `Imports` dependency
-#     of this package (gtars >= 0.9.0, for the alias accessor
-#     `get_collection_metadata_by_alias`) and must be built from source.
-#   * gtars contains a Rust crate, so the runner needs a Rust toolchain (cargo)
-#     available BEFORE gtars is compiled/installed.
-#
-# gtars lives in the databio/gtars Rust MONOREPO. Its R package, `gtars-r`,
-# depends on sibling crates (gtars-core, gtars-io, gtars-refget, ...) via
-# RELATIVE crate paths (../../../gtars-core etc., resolved from
-# gtars-r/src/rust/). `remotes::install_github("databio/gtars", subdir="gtars-r")`
-# does NOT preserve those sibling crates, so the Rust build cannot resolve the
-# relative paths and the install fails (and pak then reports
-# "Can't find package called gtars"). The robust fix used here is to do a FULL
-# checkout of the monorepo at a tag that provides 0.9.0 (v0.9.0) and
-# `R CMD INSTALL` the gtars-r subdir from within that full checkout, so the
-# relative crate paths resolve. gtars is installed into the same R library that
-# setup-r-dependencies uses, so the dependency solver sees it as already present.
+# gtars is a GitHub-only, Rust-extension dependency (NOT on CRAN/Bioconductor)
+# and is the hard `Imports` of this package (gtars >= 0.9.0, for the alias
+# accessor `get_collection_metadata_by_alias`). Rather than compiling the Rust
+# crate from the databio/gtars monorepo in CI (slow, fragile, disk-hungry), we
+# install the PREBUILT R binary attached to the gtars v0.9.0 GitHub release.
+# Constraints of that binary:
+#   * built under R 4.4 -> this job pins r-version 4.4, or the shared object
+#     won't load.
+#   * linux x86_64 only (matches ubuntu-latest).
+#   * does NOT bundle its R deps (BiocGenerics/IRanges are Bioconductor;
+#     data.table is CRAN) -> we install those first, P3M-backed
+#     (use-public-rspm) to dodge the Bioconductor object-store (osn) timeouts.
 
 on:
   push:
@@ -37,15 +31,12 @@ jobs:
       # gated off by default; leaving this unset keeps them skipped in CI.
       BIOCREFGETSTORE_RUN_REMOTE: "false"
     steps:
-      - uses: actions/checkout@v4
-
-      # The gtars Rust crate is large and is compiled twice in this job (once
-      # in the explicit build step below, and again by pak when it resolves the
-      # package's own dependency graph in setup-r-dependencies). Combined with
-      # the Bioconductor dependency tree this overflows the default runner disk
-      # ("No space left on device"). Reclaim the pre-installed toolchains we do
-      # not use to give the build ~25 GB of extra headroom.
+      # The Bioconductor dependency tree (BSgenome/Rsamtools + the big
+      # RNAseqData.* BAM data packages pulled in via Suggests) overruns the
+      # default runner disk ("cannot create R_TempDir" / write errors). Reclaim
+      # preinstalled toolchains we don't use for ~25 GB of headroom.
       - name: Free up disk space
+        shell: bash
         run: |
           sudo rm -rf /opt/hostedtoolcache/CodeQL \
                       /usr/local/lib/android \
@@ -53,65 +44,67 @@ jobs:
                       /opt/ghc \
                       /usr/local/share/boost || true
           df -h /
-        shell: bash
 
-      # Rust toolchain is required to compile the gtars Rust extension.
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v4
 
       - uses: r-lib/actions/setup-r@v2
         with:
-          r-version: release
+          # MUST match the R version the gtars binary was built under (4.4),
+          # or its shared object will not load.
+          r-version: '4.4'
           use-public-rspm: true
 
       - uses: r-lib/actions/setup-pandoc@v2
 
-      # gtars-r's own R dependencies must be present before it can be built.
-      # (BiocGenerics + IRanges are Bioconductor; data.table is CRAN.) Install
-      # them directly with pak. We do NOT use setup-r-dependencies here because
-      # that action also resolves THIS package's DESCRIPTION, which lists gtars
-      # (not yet installable) and would fail.
-      - name: Install gtars R dependencies
-        run: |
-          install.packages("pak", repos = sprintf(
-            "https://r-lib.github.io/p/pak/stable/%s/%s/%s",
-            .Platform$pkgType, R.Version()$os, R.Version()$arch))
-          pak::pkg_install(c("data.table", "bioc::BiocGenerics", "bioc::IRanges"))
-        shell: Rscript {0}
-
-      # Build + install gtars from a FULL monorepo checkout at v0.9.0 BEFORE
-      # resolving the rest of the dependency graph, so the later
-      # setup-r-dependencies sees gtars as already installed and does not try
-      # (and fail) to fetch it. A full clone (not a sparse/subdir export) is
-      # required so the gtars-r crate's relative sibling-crate paths
-      # (../../../gtars-core, ...) resolve.
-      - name: Build and install gtars (databio/gtars @ v0.9.0)
+      # Install the gtars prebuilt binary from the v0.9.0 release. Its R deps
+      # (data.table CRAN; BiocGenerics/IRanges Bioconductor) are not bundled, so
+      # install them first via pak (P3M-backed) before loading gtars. We do NOT
+      # use setup-r-dependencies here because it also resolves THIS package's
+      # DESCRIPTION, which lists gtars (not on any repo) and would fail.
+      - name: Install gtars 0.9.1 (prebuilt binary, attached to the gtars v0.9.0 release)
+        shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 --branch v0.9.0 https://github.com/databio/gtars.git "$RUNNER_TEMP/gtars"
-          # Install into R_LIBS_USER (set by setup-r) so the dependency solver
-          # in the next step finds it. Fall back to the default user library.
-          LIB="${R_LIBS_USER:-$(Rscript -e 'cat(.libPaths()[1])')}"
-          mkdir -p "$LIB"
-          R CMD INSTALL --no-multiarch --with-keep.source -l "$LIB" "$RUNNER_TEMP/gtars/gtars-r"
-          Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"))'
-        shell: bash
+          # gtars' own R deps (data.table CRAN; BiocGenerics/IRanges Bioconductor)
+          # are not bundled in the binary; install them first (P3M-backed via pak).
+          Rscript -e 'install.packages("pak", repos = sprintf("https://r-lib.github.io/p/pak/stable/%s/%s/%s", .Platform$pkgType, R.Version()$os, R.Version()$arch)); pak::pkg_install(c("data.table", "bioc::BiocGenerics", "bioc::IRanges"))'
+          # Download + install the prebuilt binary package. type="binary" is
+          # macOS/Windows-only; on Linux install the built tarball directly with
+          # R CMD INSTALL (it does not recompile a binary package). NOTE: the 0.9.1
+          # R binary is attached to the EXISTING v0.9.0 release tag (no separate
+          # v0.9.1 tag was cut), so the path is .../download/v0.9.0/gtars_0.9.1_...
+          curl -fsSL -o "$RUNNER_TEMP/gtars.tar.gz" \
+            https://github.com/databio/gtars/releases/download/v0.9.0/gtars_0.9.1_R_x86_64-pc-linux-gnu.tar.gz
+          R CMD INSTALL "$RUNNER_TEMP/gtars.tar.gz"
+          Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"), "get_seqs_from_regions" %in% getNamespaceExports("gtars"))'
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          # Bioconductor deps + check tooling. gtars is already installed above.
+          # BiocRefgetStore is a thin gtars wrapper; its only real deps are gtars
+          # (installed above) + GenomeInfoDb, with Biostrings optional (every use
+          # is requireNamespace-guarded). The heavyweight Bioconductor comparison
+          # stack (BSgenome/Rsamtools + their multi-GB dbSNP/BAM data Suggests:
+          # SNPlocs.Hsapiens.dbSNP144.GRCh38, RNAseqData.*) is used ONLY by the
+          # benchmark vignette, which is built/rendered by the pages workflow, not
+          # here. So we DON'T build vignettes in the check (see args below) and
+          # only install what the package + its tests actually use.
+          dependencies: '"hard"'
+          # Bust the cached dependency library: earlier runs cached gtars 0.9.0,
+          # and restoring it clobbered the 0.9.1 binary installed in the step
+          # above (-> "unsuitable version: gtars" at check). Bump when gtars bumps.
+          cache-version: 2
           extra-packages: |
             any::rcmdcheck
+            any::testthat
             bioc::GenomeInfoDb
             bioc::Biostrings
-            bioc::GenomicRanges
-            bioc::IRanges
-            bioc::Rsamtools
-            bioc::BSgenome
-            bioc::rtracklayer
           needs: check
 
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
-          build_args: 'c("--no-manual")'
+          # Don't build/check the benchmark vignette here (it would pull the
+          # heavyweight comparison stack). --as-cran is dropped too, so the
+          # benchmark's lone \donttest example is not executed.
+          build_args: 'c("--no-manual", "--no-build-vignettes")'
+          args: 'c("--no-manual", "--ignore-vignettes")'
