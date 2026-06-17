@@ -237,11 +237,9 @@ setMethod("names", "RefgetGenome", function(x) {
 #' @rdname RefgetGenome-class
 #' @export
 setMethod("[[", c("RefgetGenome", "character"), function(x, i) {
-  record <- gtars::get_sequence_by_name(x@store, x@collection_digest, i)
-  if (is.null(record)) {
-    stop(sprintf("Sequence '%s' not found in collection", i))
-  }
-  seq_string <- record@data
+  # Resilient to remote (lazy) stores: streams the whole sequence on demand
+  # when its bytes are not resident in a local cache.
+  seq_string <- .fetch_full_sequence(x@store, x@collection_digest, i)
 
   # Convert to DNAString if Biostrings is available
   if (requireNamespace("Biostrings", quietly = TRUE)) {

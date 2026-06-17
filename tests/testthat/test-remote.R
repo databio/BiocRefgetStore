@@ -158,7 +158,7 @@ test_that("opening fetches metadata only (lazy: no sequence data up front)", {
 })
 
 
-test_that("single-region getSeq returns the requested length and is cached", {
+test_that("single-region getSeq returns the requested length (lean, no persistence)", {
   skip_if_no_remote()
   cache_dir <- tempfile("refget_remote_")
   dir.create(cache_dir)
@@ -174,8 +174,11 @@ test_that("single-region getSeq returns the requested length and is cached", {
   expect_type(region, "character")
   expect_equal(nchar(region), 1001L)
 
-  # The cache should have grown after fetching real sequence data.
-  expect_gt(dir_size(cache_dir), size_after_open)
+  # Single-region (byte-range) reads are lean: they persist nothing by default,
+  # so the cache does not grow. Each call re-fetches just the bytes it needs --
+  # ideal for sparse, random access. (Bulk extraction past gtars' internal
+  # threshold may cache whole sequences; a single small region does not.)
+  expect_equal(dir_size(cache_dir), size_after_open)
 
   # A second region from the SAME sequence must also succeed.
   region2 <- getSeq(genome, name, start = 5000, end = 6000, as.character = TRUE)

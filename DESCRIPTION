@@ -18,7 +18,7 @@ Depends:
     R (>= 4.0),
     methods
 Imports:
-    gtars (>= 0.9.1),
+    gtars (>= 0.9.2),
     GenomeInfoDb
 Suggests:
     Biostrings,

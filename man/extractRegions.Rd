@@ -17,7 +17,7 @@ extractRegions(genome, regions, as.character = FALSE)
 DNAStringSet or character vector of extracted sequences
 }
 \description{
-Efficiently extract multiple genomic regions using BED-based extraction.
+Efficiently extract multiple genomic regions in a single in-memory call.
 }
 \examples{
 \dontrun{

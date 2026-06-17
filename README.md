@@ -8,24 +8,32 @@ BiocRefgetStore provides a bridge between the gtars RefgetStore format and Bioco
 
 ## Installation
 
-BiocRefgetStore depends on **`gtars`** (>= 0.9.1), the Rust-backed sequence-store
+BiocRefgetStore depends on **`gtars`** (>= 0.9.2), the Rust-backed sequence-store
 backend, which is **not on CRAN or Bioconductor**. Install it first.
 
-**1. Install gtars (prerequisite).** Easiest is the prebuilt R binary from the
-release (Linux x86_64, R 4.4 — no Rust toolchain needed):
+**1. Install gtars (prerequisite).** Easiest is a prebuilt R binary from the
+release (Linux x86_64 or macOS Apple Silicon/arm64, R 4.4 — no Rust toolchain
+needed):
 
 ```r
 install.packages(c("data.table", "BiocManager"))
 BiocManager::install(c("BiocGenerics", "IRanges"))   # gtars' own deps
+
+# Linux x86_64:
 install.packages(
-  "https://github.com/databio/gtars/releases/download/v0.9.0/gtars_0.9.1_R_x86_64-pc-linux-gnu.tar.gz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_x86_64-pc-linux-gnu.tar.gz",
+  repos = NULL
+)
+# macOS Apple Silicon (arm64):
+install.packages(
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_arm64-apple-darwin.tgz",
   repos = NULL
 )
 ```
 
-On other platforms/R versions, build from source — `gtars` lives in a Rust
-monorepo, so clone the full repo (not a subdir) and install with cargo/rustc
-present; `install_github()` won't work:
+On Intel macOS / other platforms / other R versions, build from source — `gtars`
+lives in a Rust monorepo, so clone the full repo (not a subdir) and install with
+cargo/rustc present; `install_github()` won't work:
 
 ```r
 # git clone https://github.com/databio/gtars.git
@@ -130,10 +138,10 @@ extractRegions(genome, regions)
 extractToFasta(genome, regions, "regions.fa")
 ```
 
-> **Requires a recent `gtars`.** The remote sequence-data reads above need the
-> `gtars` release that adds the remote partial-read path -- the release
-> following `0.9.1`. With `0.9.1` itself, opening a remote store and reading its
-> *metadata* works, but region reads fail. Install the newer `gtars` (see
+> **Requires `gtars >= 0.9.2`.** The remote sequence-data reads above need the
+> `gtars` release that adds the remote partial-read path. With `0.9.1`, opening a
+> remote store and reading its *metadata* works, but reads of sequence data
+> against a remote store fail. Install `gtars >= 0.9.2` (see
 > [Installation](#installation)) for the workflow above.
 
 For the same workflow in Python, see

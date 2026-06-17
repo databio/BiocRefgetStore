@@ -18,14 +18,14 @@ entire dataset upfront.
 
 ## Installation
 
-BiocRefgetStore depends on **`gtars`** (>= 0.9.1), the Rust-backed sequence-store
+BiocRefgetStore depends on **`gtars`** (>= 0.9.2), the Rust-backed sequence-store
 backend. `gtars` is **not on CRAN or Bioconductor**, so install it first, then
 install BiocRefgetStore.
 
 ### 1. Install gtars (prerequisite)
 
-The easiest route is the **prebuilt R binary** attached to the gtars release --
-no Rust toolchain required:
+On **Linux x86_64**, the easiest route is the **prebuilt R binary** attached to
+the gtars release -- no Rust toolchain required:
 
 ```{r install-gtars-binary, eval=FALSE}
 # gtars' own dependencies are not bundled in the binary:
@@ -34,39 +34,32 @@ BiocManager::install(c("BiocGenerics", "IRanges"))
 
 # Install the prebuilt gtars R binary directly from the release asset:
 install.packages(
-  "https://github.com/databio/gtars/releases/download/v0.9.0/gtars_0.9.1_R_x86_64-pc-linux-gnu.tar.gz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_x86_64-pc-linux-gnu.tar.gz",
   repos = NULL
 )
 ```
 
-All prebuilt binaries are built for **R 4.4** and won't load under a different R
-minor version.
-
-**macOS.** Prebuilt macOS binaries are attached to the same release, one per
-architecture -- pick the one matching your Mac (`uname -m` reports `arm64` on
-Apple Silicon, `x86_64` on Intel):
+**macOS (Apple Silicon / arm64).** A prebuilt binary is also published for
+Apple Silicon Macs:
 
 ```{r install-gtars-macos, eval=FALSE}
 install.packages(c("data.table", "BiocManager"))
 BiocManager::install(c("BiocGenerics", "IRanges"))
 
-# Apple Silicon (arm64):
 install.packages(
-  "https://github.com/databio/gtars/releases/download/v0.9.0/gtars_0.9.1_R_aarch64-apple-darwin20.tgz",
-  repos = NULL
-)
-# Intel (x86_64):
-install.packages(
-  "https://github.com/databio/gtars/releases/download/v0.9.0/gtars_0.9.1_R_x86_64-apple-darwin20.tgz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_arm64-apple-darwin.tgz",
   repos = NULL
 )
 ```
 
-(If a URL 404s, check the [releases page](https://github.com/databio/gtars/releases)
-for the exact asset name -- the `darwin` version suffix tracks the build runner.)
+Prebuilt binaries are built for **R 4.4** and won't load under a different R
+minor version. Check the
+[releases page](https://github.com/databio/gtars/releases) (tag `gtars-r-v0.9.2`)
+for the exact asset names if a URL 404s.
 
-**Other platforms / R versions.** Build from source. `gtars` lives in a Rust
-monorepo and its R package depends on sibling crates by relative path, so
+**Intel macOS / other platforms / other R versions.** No prebuilt binary is
+published for these, so build from source. `gtars` lives in a Rust monorepo and
+its R package depends on sibling crates by relative path, so
 `remotes::install_github()` does *not* work -- you need a full clone plus a Rust
 toolchain (cargo/rustc):
 
@@ -86,19 +79,37 @@ remotes::install_github("databio/BiocRefgetStore")
 ## Connect to a remote pangenome store
 
 Load a genome from the Human Pangenome Reference store. **Nothing is
-downloaded upfront:** opening fetches only the store/collection metadata. Each
-`getSeq()` then pulls just the bytes covering the region you ask for, over an
-HTTP byte-range request -- the whole sequence never lands on disk. This is the
-right default for sparse, random-access extraction: you can query a
-genome-scale collection while transferring only the handful of bases you touch.
-Region reads persist nothing by default, so each call re-fetches its bytes.
+downloaded upfront:** opening fetches only the store/collection metadata.
+Sequence data is then pulled on demand when you ask for it.
 
-> **Requires a recent `gtars`.** Remote sequence-*data* retrieval (the
-> byte-range reads below) needs the `gtars` release that adds the remote
-> partial-read path -- the release following `0.9.1`. With `0.9.1` itself,
-> opening a remote store and reading its *metadata* works, but region reads
-> fail. Install the newer `gtars` (see [Installation](#installation)) for the
-> workflow below.
+> **Requires `gtars >= 0.9.2`.** Remote sequence-*data* retrieval needs the
+> `gtars` release that adds the remote partial-read path. With `0.9.1`, opening
+> a remote store and reading its *metadata* works, but reads of sequence data
+> against a remote store fail. Install `gtars >= 0.9.2` (see
+> [Installation](#installation)) for the workflow below.
+
+### How remote retrieval works: two modes
+
+Against a remote store, sequence access uses one of two on-demand modes
+depending on whether you ask for a region or a whole sequence:
+
+- **Region reads (lean byte-range).** `getSeq(genome, name, start, end)`,
+  `extractRegions()`, and the GRanges/vectorized forms pull *only the bytes
+  covering the requested region*, over an HTTP byte-range request. The whole
+  sequence never lands on disk, and these reads persist nothing by default --
+  each call re-fetches just the bytes it needs. This is the right default for
+  sparse, random access: you can query a genome-scale collection while
+  transferring only the handful of bases you touch.
+
+- **Whole-sequence reads (streaming).** Coordinate-less access --
+  `genome[["chr"]]` or `getSeq(genome, name)` with no `start`/`end` -- streams
+  the *entire* sequence on demand with constant peak memory, then returns it.
+  Reach for this only when you genuinely need a full chromosome; for
+  random-access extraction, prefer region reads so you don't transfer bases you
+  won't use.
+
+Local stores (`RefgetGenome.from_fasta()` or an on-disk store) serve both modes
+straight from disk/memory, so the same code works unchanged.
 
 ```{r remote-store, eval=FALSE}
 library(BiocRefgetStore)

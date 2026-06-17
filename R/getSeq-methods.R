@@ -66,6 +66,29 @@ setMethod("getSeq", "RefgetGenome",
 # Internal helpers
 # -----------------------------------------------------------------------------
 
+#' Fetch a whole sequence by name, resilient to remote (lazy) stores
+#'
+#' Local stores return the full sequence bytes directly in \code{record@data}.
+#' Remote stores opened with \code{RefgetGenome.from_remote()} return metadata
+#' only (an empty \code{@data}); in that case we stream the whole sequence on
+#' demand via \code{gtars::stream_sequence()}, which pulls the bytes over an HTTP
+#' byte-range without preloading the entire store into the local cache.
+#'
+#' @keywords internal
+.fetch_full_sequence <- function(store, collection_digest, name) {
+  record <- gtars::get_sequence_by_name(store, collection_digest, name)
+  if (is.null(record)) {
+    stop(sprintf("Sequence '%s' not found in collection", name))
+  }
+  seq_string <- record@data
+  if (!nzchar(seq_string)) {
+    # Remote store: bytes are not resident. Stream the whole sequence on demand
+    # (start/end NULL -> full length) using the per-sequence digest.
+    seq_string <- gtars::stream_sequence(store, record@metadata@sha512t24u)
+  }
+  seq_string
+}
+
 #' Extract a single sequence or region
 #' @keywords internal
 .getSeq_single <- function(genome, name, start, end, strand, as.character) {
@@ -78,12 +101,10 @@ setMethod("getSeq", "RefgetGenome",
     )
     seq_string <- retrieved$sequence[[1]]
   } else {
-    # Whole-sequence request (no coordinates): fetch the full sequence.
-    record <- gtars::get_sequence_by_name(genome@store, genome@collection_digest, name)
-    if (is.null(record)) {
-      stop(sprintf("Sequence '%s' not found in collection", name))
-    }
-    seq_string <- record@data
+    # Whole-sequence request (no coordinates): fetch the full sequence. Works
+    # against remote (lazy) stores, streaming bytes on demand when the sequence
+    # is not resident in a local cache.
+    seq_string <- .fetch_full_sequence(genome@store, genome@collection_digest, name)
   }
 
   # Handle negative strand

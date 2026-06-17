@@ -4,7 +4,7 @@
 # and is the hard `Imports` of this package (gtars >= 0.9.0, for the alias
 # accessor `get_collection_metadata_by_alias`). Rather than compiling the Rust
 # crate from the databio/gtars monorepo in CI (slow, fragile, disk-hungry), we
-# install the PREBUILT R binary attached to the gtars v0.9.0 GitHub release.
+# install the PREBUILT R binary attached to the gtars-r-v0.9.2 GitHub release.
 # Constraints of that binary:
 #   * built under R 4.4 -> this job pins r-version 4.4, or the shared object
 #     won't load.
@@ -56,12 +56,12 @@ jobs:
 
       - uses: r-lib/actions/setup-pandoc@v2
 
-      # Install the gtars prebuilt binary from the v0.9.0 release. Its R deps
-      # (data.table CRAN; BiocGenerics/IRanges Bioconductor) are not bundled, so
-      # install them first via pak (P3M-backed) before loading gtars. We do NOT
+      # Install the gtars prebuilt binary from the gtars-r-v0.9.2 release. Its R
+      # deps (data.table CRAN; BiocGenerics/IRanges Bioconductor) are not bundled,
+      # so install them first via pak (P3M-backed) before loading gtars. We do NOT
       # use setup-r-dependencies here because it also resolves THIS package's
       # DESCRIPTION, which lists gtars (not on any repo) and would fail.
-      - name: Install gtars 0.9.1 (prebuilt binary, attached to the gtars v0.9.0 release)
+      - name: Install gtars 0.9.2 (prebuilt binary, attached to the gtars-r-v0.9.2 release)
         shell: bash
         run: |
           set -euo pipefail
@@ -70,13 +70,13 @@ jobs:
           Rscript -e 'install.packages("pak", repos = sprintf("https://r-lib.github.io/p/pak/stable/%s/%s/%s", .Platform$pkgType, R.Version()$os, R.Version()$arch)); pak::pkg_install(c("data.table", "bioc::BiocGenerics", "bioc::IRanges"))'
           # Download + install the prebuilt binary package. type="binary" is
           # macOS/Windows-only; on Linux install the built tarball directly with
-          # R CMD INSTALL (it does not recompile a binary package). NOTE: the 0.9.1
-          # R binary is attached to the EXISTING v0.9.0 release tag (no separate
-          # v0.9.1 tag was cut), so the path is .../download/v0.9.0/gtars_0.9.1_...
+          # R CMD INSTALL (it does not recompile a binary package). gtars uses
+          # per-component release tags, so the 0.9.2 R binary is attached to the
+          # gtars-r-v0.9.2 tag: .../download/gtars-r-v0.9.2/gtars_0.9.2_...
           curl -fsSL -o "$RUNNER_TEMP/gtars.tar.gz" \
-            https://github.com/databio/gtars/releases/download/v0.9.0/gtars_0.9.1_R_x86_64-pc-linux-gnu.tar.gz
+            https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_x86_64-pc-linux-gnu.tar.gz
           R CMD INSTALL "$RUNNER_TEMP/gtars.tar.gz"
-          Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"), "get_seqs_from_regions" %in% getNamespaceExports("gtars"))'
+          Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"), "get_seqs_from_regions" %in% getNamespaceExports("gtars"), "stream_sequence" %in% getNamespaceExports("gtars"))'
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
@@ -89,10 +89,11 @@ jobs:
           # here. So we DON'T build vignettes in the check (see args below) and
           # only install what the package + its tests actually use.
           dependencies: '"hard"'
-          # Bust the cached dependency library: earlier runs cached gtars 0.9.0,
-          # and restoring it clobbered the 0.9.1 binary installed in the step
-          # above (-> "unsuitable version: gtars" at check). Bump when gtars bumps.
-          cache-version: 2
+          # Bust the cached dependency library: earlier runs cached an older
+          # gtars, and restoring it clobbered the 0.9.2 binary installed in the
+          # step above (-> "unsuitable version: gtars" at check). Bump when gtars
+          # bumps.
+          cache-version: 3
           extra-packages: |
             any::rcmdcheck
             any::testthat
