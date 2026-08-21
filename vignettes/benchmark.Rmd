@@ -23,7 +23,7 @@ plot_file <- "benchmark_plot.png"
 ```
 
 BiocRefgetStore exposes a BSgenome-compatible interface to sequences backed by a
-[RefgetStore](https://refgenie.org/refget/refgetstore-explained/) (via the
+[RefgetStore](https://docs.refgenie.org/refget/refgetstore-explained/) (via the
 Rust-backed `gtars` crate). This vignette compares sequence extraction with the
 RefgetStore backend in this package (`RefgetGenome`) against the classic
 Bioconductor stack (`BSgenome::getSeq()` on a real `BSgenome` object).

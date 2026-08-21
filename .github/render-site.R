@@ -99,7 +99,7 @@ index <- sprintf('<!DOCTYPE html>
 <p><strong>BiocRefgetStore</strong> lets you work with reference genomes in R through
 the familiar Bioconductor <code>getSeq()</code> interface &mdash; without managing
 FASTA files. Instead of loading a genome from disk, you connect to a
-<a href="https://refgenie.org/refget/refgetstore-explained/">RefgetStore</a>
+<a href="https://docs.refgenie.org/refget/refgetstore-explained/">RefgetStore</a>
 (local or remote) and pull sequences by name or coordinate on demand. Remote
 stores stream only the bytes you touch and cache them locally, so you can query
 genome-scale collections without downloading them in full.</p>
@@ -114,7 +114,7 @@ versus ~390&nbsp;ms for <code>BSgenome::getSeq()</code>. See the benchmark below
 <strong>What is refget?</strong> See <a href="https://refget.databio.org">refget.databio.org</a>
 &mdash; the GA4GH standard for identifying and retrieving reference sequences by
 content-based digest &mdash; and the
-<a href="https://refgenie.org/refget/refgetstore-explained/">RefgetStore explainer</a>.</p>
+<a href="https://docs.refgenie.org/refget/refgetstore-explained/">RefgetStore explainer</a>.</p>
 <ul>
 %s
 </ul>
