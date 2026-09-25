@@ -85,7 +85,7 @@ jobs:
           # is requireNamespace-guarded). The heavyweight Bioconductor comparison
           # stack (BSgenome/Rsamtools + their multi-GB dbSNP/BAM data Suggests:
           # SNPlocs.Hsapiens.dbSNP144.GRCh38, RNAseqData.*) is used ONLY by the
-          # benchmark vignette, which is built/rendered by the pages workflow, not
+          # benchmark vignette, which is rendered by doc-hubs (docs.refgenie.org), not
           # here. So we DON'T build vignettes in the check (see args below) and
           # only install what the package + its tests actually use.
           dependencies: '"hard"'

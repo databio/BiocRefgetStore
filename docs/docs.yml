@@ -1,0 +1,13 @@
+# Nav and renderers for this package's docs on
+# https://docs.refgenie.org/biocrefgetstore/ (built by databio/doc-hubs,
+# hubs/refgenie). The pages are the vignettes, rendered with knitr.
+site_name: BiocRefgetStore (R)
+nav:
+  - Getting started: getting-started.md
+  - Benchmark: benchmark.md
+  - Reference: reference.md
+renderers:
+  - hub-r-vignettes:
+      include: [../vignettes/*.Rmd]
+      output_dir: .
+      figures_dir: _assets/vignettes

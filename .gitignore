@@ -9,7 +9,6 @@
 # R CMD build / check artifacts
 /*.tar.gz
 /*.Rcheck/
-docs/
 inst/doc/
 
 # testthat failure snapshots (regenerated on each run)
