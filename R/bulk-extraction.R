@@ -67,12 +67,7 @@ extractRegions <- function(genome, regions, as.character = FALSE) {
   result_names <- sprintf("%s:%d-%d", regions$chrom, regions$start, regions$end)
   names(seqs) <- result_names
 
-  # Convert to DNAStringSet if requested
-  if (!as.character && requireNamespace("Biostrings", quietly = TRUE)) {
-    return(Biostrings::DNAStringSet(seqs))
-  }
-
-  seqs
+  if (as.character) seqs else Biostrings::DNAStringSet(seqs)
 }
 
 #' Extract regions to a FASTA file
@@ -126,7 +121,7 @@ extractToFasta <- function(genome, regions, output_path) {
     start = as.integer(regions$start - 1),  # Convert to 0-based
     end = as.integer(regions$end)
   )
-  write.table(bed_df, bed_file, sep = "\t", row.names = FALSE,
+  utils::write.table(bed_df, bed_file, sep = "\t", row.names = FALSE,
               col.names = FALSE, quote = FALSE)
 
   # Use gtars BED extraction to FASTA

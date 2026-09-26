@@ -125,7 +125,6 @@ test_that("getSeq with GRanges input works", {
 
 test_that("getSeq returns DNAString when Biostrings available", {
   skip_if_not_installed("gtars")
-  skip_if_not_installed("Biostrings")
 
   fasta_file <- tempfile(fileext = ".fa")
   writeLines(c(">chr1", "ACGT"), fasta_file)
@@ -139,7 +138,6 @@ test_that("getSeq returns DNAString when Biostrings available", {
 
 test_that("getSeq returns DNAStringSet for multiple sequences", {
   skip_if_not_installed("gtars")
-  skip_if_not_installed("Biostrings")
 
   fasta_file <- tempfile(fileext = ".fa")
   writeLines(c(

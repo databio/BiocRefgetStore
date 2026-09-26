@@ -18,7 +18,7 @@ entire dataset upfront.
 
 ## Installation
 
-BiocRefgetStore depends on **`gtars`** (>= 0.9.2), the Rust-backed sequence-store
+BiocRefgetStore depends on **`gtars`** (>= 0.10.0), the Rust-backed sequence-store
 backend. `gtars` is **not on CRAN or Bioconductor**, so install it first, then
 install BiocRefgetStore.
 
@@ -34,7 +34,7 @@ BiocManager::install(c("BiocGenerics", "IRanges"))
 
 # Install the prebuilt gtars R binary directly from the release asset:
 install.packages(
-  "https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_x86_64-pc-linux-gnu.tar.gz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.0/gtars_0.10.0_R_x86_64-pc-linux-gnu.tar.gz",
   repos = NULL
 )
 ```
@@ -47,14 +47,14 @@ install.packages(c("data.table", "BiocManager"))
 BiocManager::install(c("BiocGenerics", "IRanges"))
 
 install.packages(
-  "https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_arm64-apple-darwin.tgz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.0/gtars_0.10.0_R_arm64-apple-darwin.tgz",
   repos = NULL
 )
 ```
 
 Prebuilt binaries are built for **R 4.4** and won't load under a different R
 minor version. Check the
-[releases page](https://github.com/databio/gtars/releases) (tag `gtars-r-v0.9.2`)
+[releases page](https://github.com/databio/gtars/releases) (tag `gtars-r-v0.10.0`)
 for the exact asset names if a URL 404s.
 
 **Intel macOS / other platforms / other R versions.** No prebuilt binary is
@@ -81,12 +81,6 @@ remotes::install_github("databio/BiocRefgetStore")
 Load a genome from the Human Pangenome Reference store. **Nothing is
 downloaded upfront:** opening fetches only the store/collection metadata.
 Sequence data is then pulled on demand when you ask for it.
-
-> **Requires `gtars >= 0.9.2`.** Remote sequence-*data* retrieval needs the
-> `gtars` release that adds the remote partial-read path. With `0.9.1`, opening
-> a remote store and reading its *metadata* works, but reads of sequence data
-> against a remote store fail. Install `gtars >= 0.9.2` (see
-> [Installation](#installation)) for the workflow below.
 
 ### How remote retrieval works: two modes
 
@@ -142,7 +136,7 @@ remote store.
 Extract a full sequence or a region by coordinates:
 
 ```{r getseq, eval=FALSE}
-# Full sequence (returns DNAString if Biostrings is installed)
+# Full sequence (returns a DNAString)
 seq <- genome[["JAHEPG010000017.1"]]
 
 # Region by coordinates (1-based, inclusive)

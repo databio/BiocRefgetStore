@@ -1,9 +1,3 @@
-# Define getSeq generic if not already available from Biostrings/BSgenome
-# This allows the package to work without Biostrings installed
-if (!isGeneric("getSeq")) {
-  setGeneric("getSeq", function(x, ...) standardGeneric("getSeq"))
-}
-
 #' getSeq method for RefgetGenome
 #'
 #' Extract sequences from a RefgetGenome object using BSgenome-compatible syntax.
@@ -17,7 +11,7 @@ if (!isGeneric("getSeq")) {
 #' @param ... Additional arguments (ignored)
 #'
 #' @return
-#' - Single sequence: DNAString (or character if as.character=TRUE or Biostrings unavailable)
+#' - Single sequence: DNAString (or character if as.character=TRUE)
 #' - Multiple sequences: DNAStringSet (or character vector)
 #'
 #' @examples
@@ -112,12 +106,7 @@ setMethod("getSeq", "RefgetGenome",
     seq_string <- .reverse_complement(seq_string)
   }
 
-  # Convert to DNAString if requested and Biostrings available
-  if (!as.character && requireNamespace("Biostrings", quietly = TRUE)) {
-    return(Biostrings::DNAString(seq_string))
-  }
-
-  seq_string
+  if (as.character) seq_string else Biostrings::DNAString(seq_string)
 }
 
 #' Vectorized sequence extraction
@@ -164,12 +153,7 @@ setMethod("getSeq", "RefgetGenome",
 
   names(seqs) <- result_names
 
-  # Convert to DNAStringSet if requested
-  if (!as.character && requireNamespace("Biostrings", quietly = TRUE)) {
-    return(Biostrings::DNAStringSet(seqs))
-  }
-
-  seqs
+  if (as.character) seqs else Biostrings::DNAStringSet(seqs)
 }
 
 #' Extract sequences from GRanges

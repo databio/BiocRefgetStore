@@ -24,7 +24,7 @@
 }
 \value{
 \itemize{
-\item Single sequence: DNAString (or character if as.character=TRUE or Biostrings unavailable)
+\item Single sequence: DNAString (or character if as.character=TRUE)
 \item Multiple sequences: DNAStringSet (or character vector)
 }
 }

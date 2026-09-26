@@ -188,7 +188,6 @@ test_that("single-region getSeq returns the requested length (lean, no persisten
 
 test_that("single-region getSeq returns a DNAString by default", {
   skip_if_no_remote()
-  skip_if_not_installed("Biostrings")
   cache_dir <- tempfile("refget_remote_")
   dir.create(cache_dir)
   on.exit(unlink(cache_dir, recursive = TRUE))
@@ -205,7 +204,6 @@ test_that("single-region getSeq returns a DNAString by default", {
 
 test_that("negative strand equals the reverse complement of the plus strand", {
   skip_if_no_remote()
-  skip_if_not_installed("Biostrings")
   cache_dir <- tempfile("refget_remote_")
   dir.create(cache_dir)
   on.exit(unlink(cache_dir, recursive = TRUE))
@@ -278,14 +276,9 @@ test_that("extractRegions and extractToFasta work against the remote store", {
   extractToFasta(genome, regions, out_fa)
   expect_true(file.exists(out_fa))
 
-  if (requireNamespace("Biostrings", quietly = TRUE)) {
-    written <- Biostrings::readDNAStringSet(out_fa)
-    expect_length(written, 2L)
-    expect_equal(unname(Biostrings::width(written)), c(100L, 100L))
-  } else {
-    header_lines <- grep("^>", readLines(out_fa), value = TRUE)
-    expect_length(header_lines, 2L)
-  }
+  written <- Biostrings::readDNAStringSet(out_fa)
+  expect_length(written, 2L)
+  expect_equal(unname(Biostrings::width(written)), c(100L, 100L))
 })
 
 

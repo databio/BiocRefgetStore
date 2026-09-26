@@ -233,19 +233,13 @@ setMethod("names", "RefgetGenome", function(x) {
 #'
 #' @param x A RefgetGenome object
 #' @param i Sequence name (e.g., "chr1")
-#' @return Sequence string or DNAString if Biostrings is available
+#' @return A DNAString
 #' @rdname RefgetGenome-class
 #' @export
 setMethod("[[", c("RefgetGenome", "character"), function(x, i) {
   # Resilient to remote (lazy) stores: streams the whole sequence on demand
   # when its bytes are not resident in a local cache.
-  seq_string <- .fetch_full_sequence(x@store, x@collection_digest, i)
-
-  # Convert to DNAString if Biostrings is available
-  if (requireNamespace("Biostrings", quietly = TRUE)) {
-    return(Biostrings::DNAString(seq_string))
-  }
-  seq_string
+  Biostrings::DNAString(.fetch_full_sequence(x@store, x@collection_digest, i))
 })
 
 #' Show method for RefgetGenome

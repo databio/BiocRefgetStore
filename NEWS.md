@@ -1,6 +1,13 @@
-# BiocRefgetStore (development version)
+# BiocRefgetStore 0.1.0
 
 ## New features
+
+* `forgeBSgenome()` builds an installable BSgenome data package from a
+  `RefgetGenome`, for tools that need a real `BSgenome` object. The collection
+  digest is recorded as the package's `genome` field. Requires `BSgenomeForge`.
+
+* `RefgetGenome.from_bsgenome()` loads a BSgenome into a RefgetStore. A genome
+  forged with `forgeBSgenome()` and loaded back gets the same collection digest.
 
 * Remote, on-demand sequence retrieval now works end to end against a remote
   `RefgetStore` opened with `RefgetGenome.from_remote()`. Opening fetches only
@@ -15,8 +22,15 @@
   not resident in a local cache, the full sequence is streamed on demand via
   `gtars::stream_sequence()` instead of returning an empty result.
 
+## Bug fixes
+
+* `getSeq()` on a `RefgetGenome` no longer fails with "unable to find an
+  inherited method" after BSgenome or Biostrings is attached. The package now
+  adds its method to the Biostrings `getSeq` generic instead of defining its own.
+
 ## Requirements
 
-* Requires `gtars (>= 0.9.2)` -- the release that adds the remote partial-read
-  path. With `gtars 0.9.1`, opening a remote store and reading its metadata
-  works, but region and whole-sequence reads against a remote store fail.
+* Biostrings is now a hard dependency (`Imports`). Sequences always come back
+  as `DNAString` / `DNAStringSet` unless `as.character = TRUE`.
+
+* Requires `gtars (>= 0.10.0)`.

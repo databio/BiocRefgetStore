@@ -1,10 +1,10 @@
 # R CMD check for BiocRefgetStore.
 #
 # gtars is a GitHub-only, Rust-extension dependency (NOT on CRAN/Bioconductor)
-# and is the hard `Imports` of this package (gtars >= 0.9.0, for the alias
+# and is the hard `Imports` of this package (gtars >= 0.10.0, for the alias
 # accessor `get_collection_metadata_by_alias`). Rather than compiling the Rust
 # crate from the databio/gtars monorepo in CI (slow, fragile, disk-hungry), we
-# install the PREBUILT R binary attached to the gtars-r-v0.9.2 GitHub release.
+# install the PREBUILT R binary attached to the gtars-r-v0.10.0 GitHub release.
 # Constraints of that binary:
 #   * built under R 4.4 -> this job pins r-version 4.4, or the shared object
 #     won't load.
@@ -56,12 +56,12 @@ jobs:
 
       - uses: r-lib/actions/setup-pandoc@v2
 
-      # Install the gtars prebuilt binary from the gtars-r-v0.9.2 release. Its R
+      # Install the gtars prebuilt binary from the gtars-r-v0.10.0 release. Its R
       # deps (data.table CRAN; BiocGenerics/IRanges Bioconductor) are not bundled,
       # so install them first via pak (P3M-backed) before loading gtars. We do NOT
       # use setup-r-dependencies here because it also resolves THIS package's
       # DESCRIPTION, which lists gtars (not on any repo) and would fail.
-      - name: Install gtars 0.9.2 (prebuilt binary, attached to the gtars-r-v0.9.2 release)
+      - name: Install gtars 0.10.0 (prebuilt binary, attached to the gtars-r-v0.10.0 release)
         shell: bash
         run: |
           set -euo pipefail
@@ -71,18 +71,17 @@ jobs:
           # Download + install the prebuilt binary package. type="binary" is
           # macOS/Windows-only; on Linux install the built tarball directly with
           # R CMD INSTALL (it does not recompile a binary package). gtars uses
-          # per-component release tags, so the 0.9.2 R binary is attached to the
-          # gtars-r-v0.9.2 tag: .../download/gtars-r-v0.9.2/gtars_0.9.2_...
+          # per-component release tags, so the 0.10.0 R binary is attached to the
+          # gtars-r-v0.10.0 tag: .../download/gtars-r-v0.10.0/gtars_0.10.0_...
           curl -fsSL -o "$RUNNER_TEMP/gtars.tar.gz" \
-            https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_x86_64-pc-linux-gnu.tar.gz
+            https://github.com/databio/gtars/releases/download/gtars-r-v0.10.0/gtars_0.10.0_R_x86_64-pc-linux-gnu.tar.gz
           R CMD INSTALL "$RUNNER_TEMP/gtars.tar.gz"
           Rscript -e 'library(gtars); cat("gtars", as.character(packageVersion("gtars")), "\n"); stopifnot("get_collection_metadata_by_alias" %in% getNamespaceExports("gtars"), "get_seqs_from_regions" %in% getNamespaceExports("gtars"), "stream_sequence" %in% getNamespaceExports("gtars"))'
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           # BiocRefgetStore is a thin gtars wrapper; its only real deps are gtars
-          # (installed above) + GenomeInfoDb, with Biostrings optional (every use
-          # is requireNamespace-guarded). The heavyweight Bioconductor comparison
+          # (installed above) + GenomeInfoDb + Biostrings. The heavyweight Bioconductor comparison
           # stack (BSgenome/Rsamtools + their multi-GB dbSNP/BAM data Suggests:
           # SNPlocs.Hsapiens.dbSNP144.GRCh38, RNAseqData.*) is used ONLY by the
           # benchmark vignette, which is rendered by doc-hubs (docs.refgenie.org), not
@@ -90,15 +89,17 @@ jobs:
           # only install what the package + its tests actually use.
           dependencies: '"hard"'
           # Bust the cached dependency library: earlier runs cached an older
-          # gtars, and restoring it clobbered the 0.9.2 binary installed in the
+          # gtars, and restoring it clobbered the freshly installed binary installed in the
           # step above (-> "unsuitable version: gtars" at check). Bump when gtars
           # bumps.
-          cache-version: 3
+          cache-version: 4
           extra-packages: |
             any::rcmdcheck
             any::testthat
             bioc::GenomeInfoDb
             bioc::Biostrings
+            bioc::BSgenome
+            bioc::BSgenomeForge
           needs: check
 
       - uses: r-lib/actions/check-r-package@v2

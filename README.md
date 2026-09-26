@@ -8,7 +8,7 @@ BiocRefgetStore provides a bridge between the gtars RefgetStore format and Bioco
 
 ## Installation
 
-BiocRefgetStore depends on **`gtars`** (>= 0.9.2), the Rust-backed sequence-store
+BiocRefgetStore depends on **`gtars`** (>= 0.10.0), the Rust-backed sequence-store
 backend, which is **not on CRAN or Bioconductor**. Install it first.
 
 **1. Install gtars (prerequisite).** Easiest is a prebuilt R binary from the
@@ -21,12 +21,12 @@ BiocManager::install(c("BiocGenerics", "IRanges"))   # gtars' own deps
 
 # Linux x86_64:
 install.packages(
-  "https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_x86_64-pc-linux-gnu.tar.gz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.0/gtars_0.10.0_R_x86_64-pc-linux-gnu.tar.gz",
   repos = NULL
 )
 # macOS Apple Silicon (arm64):
 install.packages(
-  "https://github.com/databio/gtars/releases/download/gtars-r-v0.9.2/gtars_0.9.2_R_arm64-apple-darwin.tgz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.0/gtars_0.10.0_R_arm64-apple-darwin.tgz",
   repos = NULL
 )
 ```
@@ -138,12 +138,6 @@ extractRegions(genome, regions)
 extractToFasta(genome, regions, "regions.fa")
 ```
 
-> **Requires `gtars >= 0.9.2`.** The remote sequence-data reads above need the
-> `gtars` release that adds the remote partial-read path. With `0.9.1`, opening a
-> remote store and reading its *metadata* works, but reads of sequence data
-> against a remote store fail. Install `gtars >= 0.9.2` (see
-> [Installation](#installation)) for the workflow above.
-
 For the same workflow in Python, see
 [`data_loaders/demo_remote_store.py`](https://github.com/refgenie/refget/blob/dev/data_loaders/demo_remote_store.py)
 in the `refgenie/refget` repository.
@@ -203,9 +197,32 @@ sequence_digests(genome)
 store <- store(genome)
 ```
 
+## Converting to and from BSgenome
+
+Some tools need a real `BSgenome` object. `forgeBSgenome()` builds an
+installable BSgenome data package from any RefgetGenome (needs `BSgenomeForge`).
+The collection digest becomes the package's `genome` field.
+
+```r
+genome <- RefgetGenome.from_fasta("genome.fa")
+pkg <- forgeBSgenome(genome, "BSgenome.Hsapiens.refget.GRCh38",
+                     organism = "Homo sapiens", circ_seqs = "chrM",
+                     dest = tempdir())
+install.packages(pkg, repos = NULL, type = "source")
+```
+
+Going the other way, `RefgetGenome.from_bsgenome()` loads any BSgenome into a
+RefgetStore, which gives it a refget digest:
+
+```r
+library(BSgenome.Hsapiens.UCSC.hg38)
+genome <- RefgetGenome.from_bsgenome(BSgenome.Hsapiens.UCSC.hg38)
+collection_digest(genome)
+```
+
+A genome forged and then loaded back gets the same digest it started with.
+
 ## Dependencies
 
-- **Required**: gtars (for RefgetStore), GenomeInfoDb (for Seqinfo)
-- **Optional**: Biostrings (for DNAString/DNAStringSet), GenomicRanges (for GRanges support)
-
-Without Biostrings, sequences are returned as character strings.
+- **Required**: gtars (for RefgetStore), GenomeInfoDb (for Seqinfo), Biostrings (for DNAString/DNAStringSet)
+- **Optional**: GenomicRanges (for GRanges input), BSgenome and BSgenomeForge (for BSgenome conversion)

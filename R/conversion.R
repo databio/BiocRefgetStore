@@ -10,10 +10,6 @@
 #'
 #' @export
 as_DNAString <- function(seq_string) {
-  if (!requireNamespace("Biostrings", quietly = TRUE)) {
-    stop("Biostrings package required for DNAString conversion. ",
-         "Install with: BiocManager::install('Biostrings')")
-  }
   Biostrings::DNAString(seq_string)
 }
 
@@ -30,10 +26,6 @@ as_DNAString <- function(seq_string) {
 #'
 #' @export
 as_DNAStringSet <- function(seq_strings, names = NULL) {
-  if (!requireNamespace("Biostrings", quietly = TRUE)) {
-    stop("Biostrings package required for DNAStringSet conversion. ",
-         "Install with: BiocManager::install('Biostrings')")
-  }
   result <- Biostrings::DNAStringSet(seq_strings)
   if (!is.null(names)) {
     names(result) <- names

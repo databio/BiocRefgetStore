@@ -68,14 +68,8 @@ test_that("RefgetGenome [[ extraction works", {
   # Extract full sequence
   seq <- genome[["chr1"]]
 
-  # Should be character or DNAString depending on Biostrings availability
-  if (requireNamespace("Biostrings", quietly = TRUE)) {
-    expect_s4_class(seq, "DNAString")
-    expect_equal(as.character(seq), "ACGTACGTACGTACGTACGT")
-  } else {
-    expect_type(seq, "character")
-    expect_equal(seq, "ACGTACGTACGTACGTACGT")
-  }
+  expect_s4_class(seq, "DNAString")
+  expect_equal(as.character(seq), "ACGTACGTACGTACGTACGT")
 })
 
 test_that("RefgetGenome errors on missing sequence", {

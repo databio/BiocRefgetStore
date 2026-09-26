@@ -34,7 +34,7 @@
 \item{object}{A RefgetGenome object}
 }
 \value{
-Sequence string or DNAString if Biostrings is available
+A DNAString
 }
 \description{
 A BSgenome-compatible wrapper around a RefgetStore collection that provides

@@ -252,7 +252,6 @@ test_that("store() returns the underlying RefgetStore", {
 
 test_that("getSeq as.character=TRUE returns character even with Biostrings", {
   skip_if_not_installed("gtars")
-  skip_if_not_installed("Biostrings")
 
   fasta_file <- tempfile(fileext = ".fa")
   writeLines(c(">chr1", "ACGTACGT"), fasta_file)
@@ -272,7 +271,6 @@ test_that("getSeq as.character=TRUE returns character even with Biostrings", {
 
 test_that("getSeq vectorized as.character=TRUE returns character vector", {
   skip_if_not_installed("gtars")
-  skip_if_not_installed("Biostrings")
 
   fasta_file <- tempfile(fileext = ".fa")
   writeLines(c(

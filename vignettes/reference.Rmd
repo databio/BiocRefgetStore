@@ -128,8 +128,7 @@ getSeq(genome, GRanges("chr1:100-200:-"))
 genome[["chr1"]]
 ```
 
-Extract a full sequence by name. Returns `DNAString` if Biostrings is
-installed, otherwise a character string.
+Extract a full sequence by name. Returns a `DNAString`.
 
 - **i** — Sequence name (character).
 - **Returns** — `DNAString` or character string.
@@ -327,7 +326,6 @@ Convert a character string to a Biostrings `DNAString` object.
 
 - **seq_string** — Character string containing a DNA sequence.
 - **Returns** — A `DNAString` object.
-- **Errors** — If Biostrings is not installed.
 
 ```{r as-dnastring, eval=FALSE}
 dna <- as_DNAString("ACGTACGT")
@@ -344,13 +342,56 @@ Convert a character vector to a Biostrings `DNAStringSet` object.
 - **seq_strings** — Character vector of DNA sequences.
 - **names** — Optional names for the sequences.
 - **Returns** — A `DNAStringSet` object.
-- **Errors** — If Biostrings is not installed.
 
 ```{r as-dnastringset, eval=FALSE}
 seqs <- as_DNAStringSet(c("ACGT", "GGCC"), names = c("seq1", "seq2"))
 ```
 
 ---
+
+## BSgenome Conversion
+
+### forgeBSgenome
+
+```r
+forgeBSgenome(genome, pkg_name, organism, common_name = organism,
+              circ_seqs = character(0), version = "1.0.0",
+              dest = ".", replace = FALSE)
+```
+
+Build an installable BSgenome data package from a RefgetGenome. Requires
+`BSgenomeForge`. The collection digest is recorded as the package's `genome`
+field.
+
+- **pkg_name** — `BSgenome.<Abbrev>.<provider>.<build>`; `<Abbrev>` becomes the exported object name.
+- **organism** — Scientific name, e.g. `"Homo sapiens"`.
+- **circ_seqs** — Names of circular sequences such as `"chrM"`.
+- **Returns** — Invisibly, the path to the new package directory.
+
+```{r forge-bsgenome, eval=FALSE}
+pkg <- forgeBSgenome(genome, "BSgenome.Hsapiens.refget.GRCh38",
+                     organism = "Homo sapiens", circ_seqs = "chrM",
+                     dest = tempdir())
+install.packages(pkg, repos = NULL, type = "source")
+```
+
+### RefgetGenome.from_bsgenome
+
+```r
+RefgetGenome.from_bsgenome(bsgenome, names = NULL)
+```
+
+Load a BSgenome into a new in-memory RefgetStore. A genome forged with
+`forgeBSgenome()` and loaded back gets the same collection digest.
+
+- **bsgenome** — A `BSgenome` object.
+- **names** — Optional sequence names to include (`NULL` = all).
+- **Returns** — A `RefgetGenome`.
+
+```{r from-bsgenome, eval=FALSE}
+library(BSgenome.Hsapiens.UCSC.hg38)
+genome <- RefgetGenome.from_bsgenome(BSgenome.Hsapiens.UCSC.hg38)
+```
 
 ## Working with the Underlying Store
 
