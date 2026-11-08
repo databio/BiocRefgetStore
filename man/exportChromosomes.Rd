@@ -13,7 +13,7 @@ exportChromosomes(genome, names = NULL, output_path, line_width = 80L)
 
 \item{output_path}{Path for output FASTA file}
 
-\item{line_width}{Number of bases per line in output (default: 80)}
+\item{line_width}{Number of bases per line in output (default: 80; 0 = no wrapping)}
 }
 \value{
 Invisibly returns the output path
