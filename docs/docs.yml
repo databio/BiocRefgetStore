@@ -4,6 +4,7 @@
 site_name: BiocRefgetStore (R)
 nav:
   - Getting started: getting-started.md
+  - Refgenie to BSgenome: refgenie-bsgenome.md
   - Benchmark: benchmark.md
   - Reference: reference.md
 renderers:

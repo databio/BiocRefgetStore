@@ -247,49 +247,9 @@ genome <- RefgetGenome.from_directory(
 
 ## Genomes from refgenie
 
-[Refgenie](https://refgenie.org) keeps the sequences of every genome it
-manages in a RefgetStore, so you can open a refgenie genome by its name.
-
-### From a refgenie server
-
-`RefgetGenome.from_refgenie()` asks a refgenie server (by default
-`https://api.refgenie.org`) which public RefgetStore holds the genome, then
-opens it from that store. Only metadata is downloaded at this point.
-
-```{r from-refgenie, eval=FALSE}
-genome <- RefgetGenome.from_refgenie("R64-1-1")   # yeast
-```
-
-Turn it into a BSgenome package with `forgeBSgenome()`:
-
-```{r from-refgenie-forge, eval=FALSE}
-pkg <- forgeBSgenome(genome, "BSgenome.Scerevisiae.refgenie.R6411",
-                     organism = "Saccharomyces cerevisiae",
-                     circ_seqs = "Mito", dest = tempdir())
-install.packages(pkg, repos = NULL, type = "source")
-library(BSgenome.Scerevisiae.refgenie.R6411)
-```
-
-Forging downloads each sequence once. For yeast that is about 3 MB and a few
-seconds; installing the package takes about 15 seconds more.
-
-### From a local refgenie genome folder
-
-Refgenie keeps its sequences in `<genome_folder>/.refget_store` (by default
-`~/.refgenie/genomes/.refget_store`) and stores genome names there under the
-alias namespace `"refgenie"`:
-
-```{r from-refgenie-folder, eval=FALSE}
-genome <- RefgetGenome.from_directory("~/.refgenie/genomes/.refget_store",
-                                      namespace = "refgenie", alias = "hg38")
-```
-
-This works for a genome that refgenie initialized from a FASTA file. A genome
-registered from a server with `--no-build` has only its metadata in the local
-store; open it with `RefgetGenome.from_refgenie()` instead.
-
-Either way, `collection_digest(genome)` is the digest refgenie shows for the
-genome, and `forgeBSgenome()` records it as the package's `genome` field.
+To open a genome that [refgenie](https://refgenie.org) manages, by its name,
+and to turn it into a BSgenome package, see the
+[Forge a BSgenome package from refgenie](refgenie-bsgenome.html) vignette.
 
 ## The same workflow in Python
 

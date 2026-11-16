@@ -1,0 +1,156 @@
+---
+title: "Forge a BSgenome package from refgenie"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Forge a BSgenome package from refgenie}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+
+# Chunks that use the network (a refgenie server and a public RefgetStore) run
+# only when BIOCREFGETSTORE_RUN_REMOTE is set, like the package's live tests.
+# Otherwise they are shown but not run. Chunks that need a local refgenie
+# genome folder never run.
+run_live <- nzchar(Sys.getenv("BIOCREFGETSTORE_RUN_REMOTE"))
+```
+
+Many Bioconductor tools take a reference genome as a
+[BSgenome](https://bioconductor.org/packages/BSgenome/) object, which comes
+from an installable data package such as `BSgenome.Hsapiens.UCSC.hg38`.
+[Refgenie](https://refgenie.org) manages reference genomes and keeps the
+sequences of each one in a
+[RefgetStore](https://docs.refgenie.org/refget/refgetstore-explained/).
+BiocRefgetStore reads a refgenie genome from that store, and `forgeBSgenome()`
+builds a BSgenome data package from it. The package records the genome's
+refgenie digest, so you can always tell which genome it holds.
+
+You need BiocRefgetStore and gtars (see the
+[Getting started](getting-started.html) vignette) and
+[BSgenomeForge](https://bioconductor.org/packages/BSgenomeForge/):
+
+```{r install, eval = FALSE}
+BiocManager::install("BSgenomeForge")
+```
+
+## From a refgenie server
+
+`RefgetGenome.from_refgenie()` opens a genome that a refgenie server lists, by
+name. It asks the server (by default `https://api.refgenie.org`) for the
+genome's digest and for the public RefgetStore that holds it, then opens the
+genome from that store. This step downloads only metadata. To find a genome's
+name, browse [refgenie.org](https://refgenie.org/genomes); this example uses
+the yeast genome `R64-1-1`.
+
+```{r open, eval = run_live}
+library(BiocRefgetStore)
+genome <- RefgetGenome.from_refgenie("R64-1-1")
+genome
+```
+
+Store data is cached under `tools::R_user_dir("BiocRefgetStore", "cache")`, in
+one folder per store. Pass `cache_path` to use another folder.
+
+Now forge the package. Its name follows the BSgenome convention
+`BSgenome.<organism>.<provider>.<build>`, and each part may hold only letters
+and numbers, so `R64-1-1` becomes `R6411`. List the circular sequences in
+`circ_seqs`; check `seqnames(genome)` for their names (`Mito` in this yeast
+genome, `chrM` in hg38).
+
+```{r forge, eval = run_live}
+pkg <- forgeBSgenome(genome, "BSgenome.Scerevisiae.refgenie.R6411",
+                     organism = "Saccharomyces cerevisiae",
+                     circ_seqs = "Mito", dest = tempdir())
+```
+
+Install and load it like any other source package:
+
+```{r install-forged, eval = FALSE}
+install.packages(pkg, repos = NULL, type = "source")
+library(BSgenome.Scerevisiae.refgenie.R6411)
+```
+
+```{r install-forged-live, include = FALSE, eval = run_live}
+# The same as above, into a temporary library, so building this vignette does
+# not change your R library.
+forged_lib <- tempfile("forged_lib_")
+dir.create(forged_lib)
+install.packages(pkg, repos = NULL, type = "source", lib = forged_lib, quiet = TRUE)
+library(BSgenome.Scerevisiae.refgenie.R6411, lib.loc = forged_lib)
+```
+
+The package exports a BSgenome object named after the second part of the
+package name:
+
+```{r bsgenome, eval = run_live}
+Scerevisiae
+getSeq(Scerevisiae, "Mito", 1, 60)
+```
+
+## From a local refgenie genome folder
+
+Refgenie keeps the sequences of the genomes it manages in
+`<genome_folder>/.refget_store`, and stores genome names there under the alias
+namespace `"refgenie"`. The genome folder is `~/.refgenie/genomes` unless you
+set `REFGENIE_GENOME_FOLDER` (see
+[Configure refgenie](https://docs.refgenie.org/refgenie/configuration/)).
+
+```{r local, eval = FALSE}
+genome <- RefgetGenome.from_directory("~/.refgenie/genomes/.refget_store",
+                                      namespace = "refgenie", alias = "R64-1-1")
+pkg <- forgeBSgenome(genome, "BSgenome.Scerevisiae.refgenie.R6411",
+                     organism = "Saccharomyces cerevisiae",
+                     circ_seqs = "Mito", dest = tempdir())
+```
+
+This reads sequences from your disk. It works for a genome whose sequences
+refgenie loaded into the store, such as one initialized from a FASTA file with
+`refgenie genome init --fasta`. A genome registered from a server with
+`refgenie genome init --server ... --no-build` has only its metadata (names,
+lengths and digests) in the local store, so reading its sequences stops with
+an error saying the bases could not be loaded. Open that genome with
+`RefgetGenome.from_refgenie()` and the same name instead.
+
+## How the package ties back to refgenie
+
+Refgenie identifies each genome by a digest computed from its sequences: its
+[GA4GH sequence collection](https://ga4gh.github.io/refget/seqcols/) digest.
+`collection_digest()` returns it, and `forgeBSgenome()` records it as the
+package's `genome` field:
+
+```{r digest, eval = run_live}
+collection_digest(genome)
+GenomeInfoDb::genome(Scerevisiae)[[1]]
+```
+
+Loading the package back into a RefgetStore recomputes the digest from the
+sequences themselves, and gives the same value:
+
+```{r roundtrip, eval = run_live}
+collection_digest(RefgetGenome.from_bsgenome(Scerevisiae))
+```
+
+So the `genome` field of any forged package leads back to its refgenie genome.
+It is the digest that `refgenie genome list` shows, and the server describes
+the genome at `https://api.refgenie.org/v4/genomes/<digest>`; for this yeast
+genome, see
+[refgenie.org/genomes/ia9g4Myony-xxLsSc7eQOC_NdClGgPGu](https://refgenie.org/genomes/ia9g4Myony-xxLsSc7eQOC_NdClGgPGu).
+
+## Sizes and times
+
+Opening a genome downloads only metadata (about 40 KB for yeast). Forging
+downloads each sequence once and keeps it in the cache folder, writes the
+sequences to temporary FASTA files, and packs them into the package's `.2bit`
+file. Installing is a standard `R CMD INSTALL`.
+
+| Genome | Sequences | Bases | Download | Open | Forge | Install |
+|---|---|---|---|---|---|---|
+| Yeast `R64-1-1`, measured | 17 | 12.2 Mbp | 3.1 MB | 2.5 s | 6.2 s | 12.7 s |
+| Human `hg38`, estimated | 195 | 3.1 Gbp | 1.4 GB | | | |
+
+The yeast numbers come from one run on one workstation with an empty cache.
+The hg38 row is an estimate, not a measurement: its download is the total size
+of its 195 sequence files in the public store, and its temporary FASTA files
+need about 3.1 GB of disk while forging. Its times were not measured.
