@@ -46,6 +46,14 @@ Load a `RefgetGenome` from a persisted on-disk refget store directory.
 genome <- RefgetGenome.from_directory("~/.refget/hg38", digest = "abc123...")
 ```
 
+A refgenie genome folder keeps its store in `<genome_folder>/.refget_store`,
+with genome names under namespace `"refgenie"`:
+
+```{r from-directory-refgenie, eval=FALSE}
+genome <- RefgetGenome.from_directory("~/.refgenie/genomes/.refget_store",
+                                      namespace = "refgenie", alias = "hg38")
+```
+
 ### RefgetGenome.from_remote
 
 ```r
@@ -65,6 +73,26 @@ genome <- RefgetGenome.from_remote(
   remote_url = "https://refgenie.s3.us-east-1.amazonaws.com/pangenome_refget_store",
   digest = "0qveCdMlbF_kYn6XWb7YBy-FtRZ6gSAL"
 )
+```
+
+### RefgetGenome.from_refgenie
+
+```r
+RefgetGenome.from_refgenie(genome, server = "https://api.refgenie.org", cache_path = NULL)
+```
+
+Open a genome that a refgenie server lists. The server says which public
+refget store holds the genome, and the genome is opened from that store with
+`RefgetGenome.from_remote()`.
+
+- **genome** — A genome name the server knows (e.g., `"hg38"`) or a collection digest.
+- **server** — URL of the refgenie server.
+- **cache_path** — Local cache directory. Default: one folder per store under
+  `tools::R_user_dir("BiocRefgetStore", "cache")`.
+- **Returns** — A `RefgetGenome` object.
+
+```{r from-refgenie, eval=FALSE}
+genome <- RefgetGenome.from_refgenie("hg38")
 ```
 
 ### RefgetGenome (low-level)

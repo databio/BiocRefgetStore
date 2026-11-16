@@ -1,3 +1,31 @@
+# BiocRefgetStore (development version)
+
+## New features
+
+* `RefgetGenome.from_refgenie()` opens a genome by name from a refgenie server
+  (default `https://api.refgenie.org`). It asks the server which public
+  RefgetStore holds the genome and opens it from there. Together with
+  `forgeBSgenome()`, this turns any genome the server lists into a BSgenome
+  package.
+
+* The docs show how to open a genome from a local refgenie genome folder:
+  `RefgetGenome.from_directory("<genome_folder>/.refget_store",
+  namespace = "refgenie", alias = ...)`.
+
+## Bug fixes
+
+* `genome[["name"]]` on a sequence whose bases are not in the store (such as a
+  refgenie genome registered with `--no-build`) now says so, instead of saying
+  the sequence is not in the collection.
+
+## Requirements
+
+* Requires `gtars (>= 0.10.1)`. It refreshes a remote store's manifest each
+  time the store is opened; older gtars kept the first cached copy, so genomes
+  added to a public store later were not found.
+
+* Imports `jsonlite`.
+
 # BiocRefgetStore 0.1.0
 
 ## New features

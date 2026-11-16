@@ -26,9 +26,20 @@ A RefgetGenome object
 \description{
 Convenience constructor that loads a RefgetStore from a directory.
 }
+\details{
+A refgenie (>= 1.0) genome folder keeps its RefgetStore in
+\code{<genome_folder>/.refget_store} and stores genome names there under
+alias namespace \code{"refgenie"}. A genome that refgenie registered from a
+server without building it (\code{--no-build}) has only its metadata in that
+store; open it with \code{\link{RefgetGenome.from_refgenie}} instead.
+}
 \examples{
 \dontrun{
 genome <- RefgetGenome.from_directory("/path/to/store", digest = "abc123...")
+
+# A genome in a refgenie genome folder, by its refgenie name
+genome <- RefgetGenome.from_directory("~/.refgenie/genomes/.refget_store",
+                                      namespace = "refgenie", alias = "hg38")
 }
 
 }

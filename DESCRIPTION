@@ -20,9 +20,10 @@ Depends:
     R (>= 4.0),
     methods
 Imports:
-    gtars (>= 0.10.0),
+    gtars (>= 0.10.1),
     GenomeInfoDb,
-    Biostrings
+    Biostrings,
+    jsonlite
 Suggests:
     GenomicRanges,
     IRanges,

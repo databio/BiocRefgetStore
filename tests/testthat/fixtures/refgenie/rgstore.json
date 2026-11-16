@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "seqdata_path_template": "sequences/%s2/%s.seq",
+  "collections_path_template": "collections/%s.rgsi",
+  "sequence_index": "sequences.rgsi",
+  "collection_index": "collections.rgci",
+  "mode": "Encoded",
+  "created_at": "2026-11-16T15:21:23.581573171+00:00",
+  "ancillary_digests": true,
+  "attribute_index": false,
+  "collection_alias_namespaces": [
+    "refgenie"
+  ],
+  "modified": "2026-11-16T15:21:26.397627917+00:00",
+  "collections_digest": "c6794858ccd020c76d4975cf2990f1de86e0dffa25b6ecc438d1c9b98ed07858",
+  "sequences_digest": "41c13de37a5876aaa43fecb69ff0bceabbe6234ef60b762bfaa33754186e7dde",
+  "aliases_digest": "b42a65547c86ae28d6efe15196517774f1c7a24fc9e4e69a88dc01c80db3f59d",
+  "logical_sequence_bytes": 3051709
+}

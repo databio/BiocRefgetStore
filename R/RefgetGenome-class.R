@@ -81,6 +81,12 @@ RefgetGenome <- function(store, digest = NULL, namespace = NULL, alias = NULL) {
 #'
 #' Convenience constructor that loads a RefgetStore from a directory.
 #'
+#' A refgenie (>= 1.0) genome folder keeps its RefgetStore in
+#' \code{<genome_folder>/.refget_store} and stores genome names there under
+#' alias namespace \code{"refgenie"}. A genome that refgenie registered from a
+#' server without building it (\code{--no-build}) has only its metadata in that
+#' store; open it with \code{\link{RefgetGenome.from_refgenie}} instead.
+#'
 #' @param path Path to the RefgetStore directory
 #' @param digest The collection digest to use
 #' @param namespace Optional alias namespace
@@ -91,6 +97,10 @@ RefgetGenome <- function(store, digest = NULL, namespace = NULL, alias = NULL) {
 #' @examples
 #' \dontrun{
 #' genome <- RefgetGenome.from_directory("/path/to/store", digest = "abc123...")
+#'
+#' # A genome in a refgenie genome folder, by its refgenie name
+#' genome <- RefgetGenome.from_directory("~/.refgenie/genomes/.refget_store",
+#'                                       namespace = "refgenie", alias = "hg38")
 #' }
 #'
 #' @export
@@ -147,6 +157,66 @@ RefgetGenome.from_fasta <- function(fasta_path) {
 RefgetGenome.from_remote <- function(cache_path, remote_url, digest = NULL, namespace = NULL, alias = NULL) {
   store <- gtars::refget_store_open_remote(cache_path, remote_url)
   RefgetGenome(store, digest = digest, namespace = namespace, alias = alias)
+}
+
+#' Create RefgetGenome from a refgenie server
+#'
+#' Opens a genome that a refgenie server lists, by name or digest. The server
+#' tells which public RefgetStore holds the genome, and the genome is opened
+#' from that store with \code{\link{RefgetGenome.from_remote}}. Only metadata is
+#' fetched here; sequence bytes are downloaded when they are read.
+#'
+#' @param genome A genome name the server knows (e.g. \code{"hg38"},
+#'   \code{"R64-1-1"}) or a 32-character collection digest
+#' @param server URL of the refgenie server
+#' @param cache_path Local directory for caching store data. Default: a folder
+#'   per store under \code{tools::R_user_dir("BiocRefgetStore", "cache")}
+#'
+#' @return A RefgetGenome object
+#'
+#' @examples
+#' \dontrun{
+#' genome <- RefgetGenome.from_refgenie("R64-1-1")
+#' pkg <- forgeBSgenome(genome, "BSgenome.Scerevisiae.refgenie.R6411",
+#'                      organism = "Saccharomyces cerevisiae",
+#'                      circ_seqs = "Mito", dest = tempdir())
+#' install.packages(pkg, repos = NULL, type = "source")
+#' }
+#'
+#' @export
+RefgetGenome.from_refgenie <- function(genome, server = "https://api.refgenie.org",
+                                       cache_path = NULL) {
+  server <- sub("/+$", "", server)
+  get_json <- function(path, what) {
+    # A failed request warns (e.g. "HTTP status was '404 Not Found'") before it
+    # errors, so either one ends the call with that message.
+    fail <- function(e) {
+      stop(sprintf("Could not get %s from %s: %s", what, server, conditionMessage(e)),
+           call. = FALSE)
+    }
+    tryCatch(jsonlite::fromJSON(paste0(server, path), simplifyVector = FALSE),
+             warning = fail, error = fail)
+  }
+  # Look the name up first: some genome names are 32 characters long, like a digest.
+  digest <- tryCatch(
+    get_json(paste0("/v4/aliases/", utils::URLencode(genome, reserved = TRUE)),
+             sprintf("genome '%s'", genome))$digest,
+    error = function(e) {
+      if (grepl("^[A-Za-z0-9_-]{32}$", genome)) genome else stop(e)
+    }
+  )
+  remote_url <- get_json(paste0("/v4/genomes/", digest),
+                         sprintf("genome %s", digest))$refget_store_url
+  if (is.null(remote_url)) {
+    stop(sprintf("Server %s gives no RefgetStore for genome %s", server, digest),
+         call. = FALSE)
+  }
+  if (is.null(cache_path)) {
+    # One cache per store: a cache folder belongs to a single remote store.
+    cache_path <- file.path(tools::R_user_dir("BiocRefgetStore", "cache"),
+                            gsub("[^A-Za-z0-9._-]+", "_", sub("^[a-z]+://", "", remote_url)))
+  }
+  RefgetGenome.from_remote(cache_path, remote_url, digest = digest)
 }
 
 # =============================================================================

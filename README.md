@@ -8,7 +8,7 @@ BiocRefgetStore provides a bridge between the gtars RefgetStore format and Bioco
 
 ## Installation
 
-BiocRefgetStore depends on **`gtars`** (>= 0.10.0), the Rust-backed sequence-store
+BiocRefgetStore depends on **`gtars`** (>= 0.10.1), the Rust-backed sequence-store
 backend, which is **not on CRAN or Bioconductor**. Install it first.
 
 **1. Install gtars (prerequisite).** Easiest is a prebuilt R binary from the
@@ -21,12 +21,12 @@ BiocManager::install(c("BiocGenerics", "IRanges"))   # gtars' own deps
 
 # Linux x86_64:
 install.packages(
-  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.0/gtars_0.10.0_R_x86_64-pc-linux-gnu.tar.gz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.1/gtars_0.10.1_R_x86_64-pc-linux-gnu.tar.gz",
   repos = NULL
 )
 # macOS Apple Silicon (arm64):
 install.packages(
-  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.0/gtars_0.10.0_R_arm64-apple-darwin.tgz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.1/gtars_0.10.1_R_arm64-apple-darwin.tgz",
   repos = NULL
 )
 ```
@@ -75,6 +75,13 @@ genome <- RefgetGenome.from_fasta("/path/to/genome.fa")
 
 # From persisted RefgetStore directory
 genome <- RefgetGenome.from_directory("/path/to/store", digest = "abc123...")
+
+# From a refgenie server, by genome name (fetches metadata only)
+genome <- RefgetGenome.from_refgenie("hg38")
+
+# From a local refgenie genome folder, by genome name
+genome <- RefgetGenome.from_directory("~/.refgenie/genomes/.refget_store",
+                                      namespace = "refgenie", alias = "hg38")
 
 # From RefgetStore with alias
 store <- gtars::refget_store_open_local("/path/to/store")
@@ -207,6 +214,16 @@ The collection digest becomes the package's `genome` field.
 genome <- RefgetGenome.from_fasta("genome.fa")
 pkg <- forgeBSgenome(genome, "BSgenome.Hsapiens.refget.GRCh38",
                      organism = "Homo sapiens", circ_seqs = "chrM",
+                     dest = tempdir())
+install.packages(pkg, repos = NULL, type = "source")
+```
+
+Any genome on a refgenie server works the same way, with no local files:
+
+```r
+genome <- RefgetGenome.from_refgenie("R64-1-1")
+pkg <- forgeBSgenome(genome, "BSgenome.Scerevisiae.refgenie.R6411",
+                     organism = "Saccharomyces cerevisiae", circ_seqs = "Mito",
                      dest = tempdir())
 install.packages(pkg, repos = NULL, type = "source")
 ```

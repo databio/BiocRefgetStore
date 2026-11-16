@@ -72,6 +72,14 @@ setMethod("getSeq", "RefgetGenome",
 .fetch_full_sequence <- function(store, collection_digest, name) {
   record <- gtars::get_sequence_by_name(store, collection_digest, name)
   if (is.null(record)) {
+    if (name %in% gtars::get_level2(store, collection_digest)$names) {
+      # e.g. a genome refgenie registered from a server with --no-build
+      stop(sprintf(paste0(
+        "Sequence '%s' is in the collection, but its bases could not be loaded ",
+        "from this store. A local store may hold only the collection's metadata; ",
+        "if so, open the genome from a remote store (see RefgetGenome.from_refgenie)."),
+        name), call. = FALSE)
+    }
     stop(sprintf("Sequence '%s' not found in collection", name))
   }
   seq_string <- record@data
