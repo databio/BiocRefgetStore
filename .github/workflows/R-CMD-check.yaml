@@ -93,7 +93,7 @@ jobs:
           # gtars, and restoring it clobbered the freshly installed binary installed in the
           # step above (-> "unsuitable version: gtars" at check). Bump when gtars
           # bumps.
-          cache-version: 5
+          cache-version: 6
           extra-packages: |
             any::rcmdcheck
             any::testthat
