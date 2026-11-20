@@ -18,7 +18,7 @@ entire dataset upfront.
 
 ## Installation
 
-BiocRefgetStore depends on **`gtars`** (>= 0.10.1), the Rust-backed sequence-store
+BiocRefgetStore depends on **`gtars`** (>= 0.11.0), the Rust-backed sequence-store
 backend. `gtars` is **not on CRAN or Bioconductor**, so install it first, then
 install BiocRefgetStore.
 
@@ -34,7 +34,7 @@ BiocManager::install(c("BiocGenerics", "IRanges"))
 
 # Install the prebuilt gtars R binary directly from the release asset:
 install.packages(
-  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.1/gtars_0.10.1_R_x86_64-pc-linux-gnu.tar.gz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.11.0/gtars_0.11.0_R_x86_64-pc-linux-gnu.tar.gz",
   repos = NULL
 )
 ```
@@ -47,14 +47,14 @@ install.packages(c("data.table", "BiocManager"))
 BiocManager::install(c("BiocGenerics", "IRanges"))
 
 install.packages(
-  "https://github.com/databio/gtars/releases/download/gtars-r-v0.10.1/gtars_0.10.1_R_arm64-apple-darwin.tgz",
+  "https://github.com/databio/gtars/releases/download/gtars-r-v0.11.0/gtars_0.11.0_R_arm64-apple-darwin.tgz",
   repos = NULL
 )
 ```
 
 Prebuilt binaries are built for **R 4.4** and won't load under a different R
 minor version. Check the
-[releases page](https://github.com/databio/gtars/releases) (tag `gtars-r-v0.10.1`)
+[releases page](https://github.com/databio/gtars/releases) (tag `gtars-r-v0.11.0`)
 for the exact asset names if a URL 404s.
 
 **Intel macOS / other platforms / other R versions.** No prebuilt binary is
