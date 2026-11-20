@@ -129,7 +129,8 @@ extractToFasta <- function(genome, regions, output_path) {
     genome@store,
     genome@collection_digest,
     bed_file,
-    output_path
+    output_path,
+    label = "{name}"
   )
 
   invisible(output_path)
@@ -142,7 +143,7 @@ extractToFasta <- function(genome, regions, output_path) {
 #' @param genome A RefgetGenome object
 #' @param names Character vector of chromosome names to export (NULL = all)
 #' @param output_path Path for output FASTA file
-#' @param line_width Number of bases per line in output (default: 80)
+#' @param line_width Number of bases per line in output (default: 80; 0 = no wrapping)
 #'
 #' @return Invisibly returns the output path
 #'
@@ -161,9 +162,10 @@ extractToFasta <- function(genome, regions, output_path) {
 exportChromosomes <- function(genome, names = NULL, output_path, line_width = 80L) {
   gtars::export_fasta(
     genome@store,
-    genome@collection_digest,
     output_path,
-    sequence_names = names,
+    collections = genome@collection_digest,
+    names = names,
+    label = "{name}",
     line_width = as.integer(line_width)
   )
   invisible(output_path)
